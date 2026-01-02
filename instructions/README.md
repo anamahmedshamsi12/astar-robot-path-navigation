@@ -112,6 +112,9 @@ Total Points: 32
 
 Please note: As we better refine the rubric, it may be updated on wording. Double check the wording in canvas before submission as that is the most accurate version. 
 
+## Research
+If you haven't yet, please take the end of semester research survey. [https://neu.co1.qualtrics.com/jfe/form/SV_5sslTYF7GP5olBs](https://neu.co1.qualtrics.com/jfe/form/SV_5sslTYF7GP5olBs).
+
 
 ## 📚 Resources
 * [ACM Journal Access](https://login.ezproxy.neu.edu/) Login via this link to ACM (using your NEU credentials) to get free access to the ACM (association for computing machinery) journals. *This is arguably your best spot for peer reviewed journals in computer science.*
