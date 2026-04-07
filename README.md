@@ -1,6 +1,6 @@
 # Research Paper
-* Name:
-* Semester:
+* Name: Anam Shamsi
+* Semester: Spring 2026
 * Topic:
 
 
