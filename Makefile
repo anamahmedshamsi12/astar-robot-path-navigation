@@ -1,4 +1,4 @@
-CC     = gcc
+CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -pedantic -O2 -Isrc
 
 all: demo tests_runner benchmark_runner
