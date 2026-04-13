@@ -1,6 +1,9 @@
+gcc -std=c11 -Wall -Wextra -pedantic -O2 -Isrc src/main.c src/astar.c -o demo
 ./demo
-A* Humanoid Navigation Demo
-===========================
+A* Robot Navigation Demo
+Dynamic Weight Coefficient: k=3.0 (far), k=0.85 (near), threshold=18
+Based on Chatzisavvas et al. [1], Hu et al. [2], Mai Jialing et al. [3]
+========================================================================
 
 Initial map:
 S . . . . . . . 
@@ -12,11 +15,11 @@ S . . . . . . .
 . # # # . . . . 
 . . . . . . . G 
 
-A* result
+A* result (dynamic weight)
   found: yes
   path length: 15
-  nodes expanded: 15
-Dijkstra result
+  nodes expanded: 51
+Dijkstra result (no heuristic)
   found: yes
   path length: 15
   nodes expanded: 51
@@ -34,15 +37,15 @@ S * * * * * * *
 . # # # . . . * 
 . . . . . . . G 
 
-Rerouting example
------------------
+Rerouting example (inspired by Hu et al. [2])
+---------------------------------------------
 Robot moved to (0,3).
-A new obstacle appeared at (0,4).
+New obstacle appeared at (0,4).
 
 Rerouted A* result
   found: yes
   path length: 16
-  nodes expanded: 22
+  nodes expanded: 29
 
 Rerouted path:
 (0,3) -> (0,2) -> (0,1) -> (1,1) -> (2,1) -> (3,1) -> (4,1) -> (5,1) -> (5,2) -> (5,3) -> (5,4) -> (5,5) -> (5,6) -> (5,7) -> (6,7) -> (7,7)
