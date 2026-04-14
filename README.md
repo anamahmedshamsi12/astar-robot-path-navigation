@@ -62,21 +62,14 @@ CS 5008 — Summative Research Project
 This paper presents an implementation of the A\* Search Algorithm with a dynamic weight coefficient applied to robot navigation on a 2D occupancy grid and a weighted waypoint network. The dynamic weight, introduced by Chatzisavvas et al. [1], modifies the standard evaluation function $f(n) = g(n) + h(n)$ to $f(n) = g(n) + k \cdot h(n)$, where $k$ adapts based on the estimated remaining distance to the goal. Empirical results demonstrate that this modification reduces nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six grid sizes ranging from 10×10 to 60×60. The implementation is written in C using a from-scratch binary min-heap priority queue and is validated by nine correctness tests. Visualizations on both a grid environment and a building waypoint network confirm the theoretical efficiency claims made by the source literature.
 
 ## 1. Introduction
+ 
+Path planning is one of the most fundamental problems in autonomous robot navigation. A robot placed in an environment must determine a collision-free route from its current position to a goal location while minimizing traversal cost. The A\* Search Algorithm, originally proposed by Hart, Nilsson, and Raphael [4], has remained the dominant approach to this problem for over five decades due to its completeness, optimality under admissible heuristics, and practical efficiency relative to uninformed methods such as Dijkstra's algorithm.
+ 
+Despite its widespread adoption, standard A\* exhibits known inefficiencies in large-scale environments. Chatzisavvas, Dossis, and Dasygenis [1] demonstrate that A\* tends to generate excessive search routes when the heuristic weight is fixed, particularly in environments with irregular obstacle layouts. Hu et al. [2] observe similar behavior in outdoor delivery robot scenarios, noting that Dijkstra's algorithm examines roughly twice as many nodes as A\* while producing paths of equivalent quality. Mai Jialing and Zhang Xiaohua [3] further identify that the traditional A\* algorithm generates redundant nodes and non-smooth paths when applied to complex indoor environments.
 
-This project implements the A\* Search Algorithm in C and applies it to robot navigation on both a 2D occupancy grid and a weighted waypoint network. The core idea is that a robot needs to find the shortest collision-free path from a starting location to a goal location in an environment that contains obstacles such as walls, furniture, or restricted zones.
-
-What makes this implementation different from a standard A\* is the inclusion of a **dynamic weight coefficient** on the heuristic function, taken directly from the research by Chatzisavvas et al. [1]. In standard A\*, the evaluation function is:
-
-$$f(n) = g(n) + h(n)$$
-
-This implementation uses:
-
-$$f(n) = g(n) + k \cdot h(n)$$
-
-where $k$ is chosen dynamically based on how far the robot is from the goal. When the robot is far away, $k = 3$ to push the search aggressively toward the goal. When the robot is close, $k = 0.85$ to be more cautious and accurate. This single change significantly reduces the number of nodes the algorithm has to explore, which is critical for real-time robot navigation where replanning must happen quickly.
-
-The project is grounded in three peer-reviewed ACM and MDPI papers, all of which study improved variants of A\* for robot path planning. The algorithm is implemented in C, tested with 9 correctness tests, benchmarked empirically across six grid sizes, and visualized using matplotlib and networkx in Python.
-
+To address these limitations, this paper implements the dynamic weight coefficient proposed by Chatzisavvas et al. [1] in which the heuristic weight $k$ is set to 3 when the estimated remaining cost exceeds a threshold of 18, and to 0.85 otherwise. This adaptation makes the search aggressive when the robot is far from the goal and cautious when approaching it, reducing unnecessary exploration without sacrificing path quality in practice.
+ 
+The implementation connects directly to data structures and algorithms studied throughout CS 5008. The graph representation mirrors the City Finder assignment from Module 10, the priority queue uses the binary min-heap from Module 9, the greedy priority selection extends Dijkstra's algorithm from Module 11, and the correctness argument follows the loop invariant methodology from Module 13. The algorithm is implemented in C, tested empirically across six grid sizes, and visualized on both a grid environment and a weighted building waypoint network.
 ---
 
 ## 2. Why I Chose This Topic
