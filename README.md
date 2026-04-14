@@ -70,17 +70,5 @@ Despite its widespread adoption, standard A\* exhibits known inefficiencies in l
 To address these limitations, this paper implements the dynamic weight coefficient proposed by Chatzisavvas et al. [1] in which the heuristic weight $k$ is set to 3 when the estimated remaining cost exceeds a threshold of 18, and to 0.85 otherwise. This adaptation makes the search aggressive when the robot is far from the goal and cautious when approaching it, reducing unnecessary exploration without sacrificing path quality in practice.
  
 The implementation connects directly to data structures and algorithms studied throughout CS 5008. The graph representation mirrors the City Finder assignment from Module 10, the priority queue uses the binary min-heap from Module 9, the greedy priority selection extends Dijkstra's algorithm from Module 11, and the correctness argument follows the loop invariant methodology from Module 13. The algorithm is implemented in C, tested empirically across six grid sizes, and visualized on both a grid environment and a weighted building waypoint network.
----
-
-## 2. Why I Chose This Topic
-
-I chose A\* for three reasons.
-
-First, it connects directly to algorithms and data structures covered in this course. A\* is built on graphs (Module 10), uses a binary min-heap as a priority queue (Module 9), applies the same greedy selection principle as Dijkstra's algorithm (Module 11), and can be proven correct using a loop invariant (Module 13). Studying it meant revisiting almost every major topic from the second half of the course in a unified context.
-
-Second, the connection to the City Finder homework from Module 10 was immediately obvious. In that assignment, cities were nodes, roads were weighted edges, and the task was to find a path between two cities. Robot navigation is the exact same problem — rooms or waypoints replace cities, corridors replace roads, and the goal is still to find the shortest path. A\* improves on that assignment's approach by adding a heuristic that focuses the search toward the goal instead of exploring in all directions blindly.
-
-Third, all three of my source papers are recent ACM and MDPI publications that study A\* specifically in the context of robot navigation, which gave me high-quality academic grounding for both the background section and the empirical analysis.
 
 ---
-
