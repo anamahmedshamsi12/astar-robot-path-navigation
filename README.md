@@ -112,7 +112,93 @@ Formally, the grid can be understood as a graph $G = (V, E)$ where $V$ is the se
  
 In the C implementation, the grid is stored as a flat 1D array using row-major indexing, where each cell's position is computed as $\text{index}(r, c) = r \cdot \text{cols} + c$. This is the same memory layout studied in Module 2 when we examined how 2D data is stored in C. The grid is always passed by pointer to avoid copying the full array on every function call, consistent with the pass-by-pointer conventions from the Module 2 code-alongs.
 
+### 3.2 Weighted Waypoint Network
+ 
+The secondary model is a weighted undirected graph representing a building floor plan, in which nodes correspond to named rooms or waypoints and edge weights represent corridor distances. This model is structurally equivalent to the City Finder assignment from Module 10, where cities were nodes and roads were weighted edges. A\* finds the minimum-weight path from the Entrance node to the Exit node. In this model, the Euclidean distance between node positions serves as the heuristic, consistent with the approach of Mai Jialing and Zhang Xiaohua [3] for environments with non-uniform edge weights.
+ 
+### 3.3 The Heuristic Function
+ 
+For the occupancy grid, the heuristic is Manhattan distance:
+ 
+$$h(n) = |r_n - r_t| + |c_n - c_t|$$
+ 
+where $(r_n, c_n)$ is the current node and $(r_t, c_t)$ is the goal. This heuristic is admissible on a 4-direction grid with unit step costs because the shortest possible path between any two cells is their Manhattan distance. No path can be shorter regardless of obstacle placement, since obstacles can only increase the distance traveled. Chatzisavvas et al. [1] and Hu et al. [2] both select Manhattan distance as the base heuristic for grid environments for this same reason. The dynamic weight $k$ is then applied to scale this base estimate based on how far the robot is from the goal.
+ 
+ ## 4. Algorithm
+ 
+### 4.1 Standard A\*
+ 
+The standard A\* algorithm maintains three data structures: an open set ordered by $f$-score, a $g$-score array storing the best known cost from start to each node, and a parent array recording the predecessor of each node on the best known path. At each iteration, the node with the lowest $f$-score is removed from the open set, its neighbors are evaluated, and any improvements to known costs are recorded. The algorithm terminates when the goal node is removed from the open set, indicating success, or when the open set is empty, indicating that no path exists.
 
+### 4.2 Modified Evaluation Function
+ 
+This implementation replaces the standard evaluation function with the dynamic weight variant from Chatzisavvas et al. [1]:
+ 
+$$f(n) = g(n) + k \cdot h(n), \quad k = \begin{cases} 3 & \text{if } h(n) > 18 \\ 0.85 & \text{if } h(n) \leq 18 \end{cases}$$
+ 
+Since $k = 0.85$ is not representable exactly in integer arithmetic, it is implemented as the fraction $85/100$ using integer division, which avoids any dependency on floating-point arithmetic while preserving the intent of the weight. The implementation in C is as follows:
+
+```c
+static int compute_weighted_f(int g, int h, int ec) {
+    if (ec > EC_THRESHOLD) {
+        return g + WEIGHT_HIGH * h;
+    } else {
+        return g + (h * WEIGHT_LOW_NUM) / WEIGHT_LOW_DEN;
+    }
+}
+```
+
+where `EC_THRESHOLD = 18`, `WEIGHT_HIGH = 3`, `WEIGHT_LOW_NUM = 85`, and `WEIGHT_LOW_DEN = 100`. This single function is the only part of the code that differs from a standard A\* implementation, which makes the comparison with Dijkstra and with standard A\* straightforward to reason about.
+
+### 4.3 Pseudocode
+ 
+```
+A_STAR_DYNAMIC_WEIGHT(grid, start, goal)
+ 
+    initialize g_score[all nodes] = INF
+    initialize parent[all nodes]  = NULL
+    initialize closed[all nodes]  = false
+ 
+    g_score[start] = 0
+    h = manhattan_distance(start, goal)
+    k = 3.0 if h > 18 else 0.85
+    push (k * h, start) into min-heap open_set
+ 
+    while open_set is not empty
+ 
+        current = pop node with lowest f from open_set
+ 
+        if current already in closed set
+            continue
+ 
+        add current to closed set
+        increment nodes_expanded
+ 
+        if current == goal
+            reconstruct path by following parent links from goal to start
+            return path
+ 
+        for each neighbor of current (up, down, left, right)
+ 
+            if neighbor is out of bounds or is an obstacle
+                continue
+            if neighbor is in closed set
+                continue
+ 
+            tentative_g = g_score[current] + 1
+ 
+            if tentative_g < g_score[neighbor]
+                parent[neighbor]  = current
+                g_score[neighbor] = tentative_g
+                h  = manhattan_distance(neighbor, goal)
+                k  = 3.0 if h > 18 else 0.85
+                f  = tentative_g + k * h
+                push (f, neighbor) into open_set
+ 
+    return NO_PATH_FOUND
+```
+ 
+Dijkstra's algorithm is obtained by setting $k = 0$ throughout, which reduces the priority function to $f(n) = g(n)$ and eliminates all directional guidance toward the goal.
 
 
 ## References
