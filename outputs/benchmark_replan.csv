@@ -1,0 +1,5 @@
+grid_size,initial_nodes,replan_nodes,initial_time_us,replan_time_us
+20,44,62,2.962,4.088
+30,64,86,4.440,6.085
+40,84,100,6.162,8.031
+50,104,118,8.146,9.833

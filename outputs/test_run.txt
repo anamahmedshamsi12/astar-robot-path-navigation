@@ -1,0 +1,13 @@
+Running tests...
+PASS: test_manhattan_distance
+PASS: test_fRunning tests...
+PASS: test_manhattan_distance
+PASS: test_finds_path_in_open_grid
+PASS: test_finds_path_around_obstacles
+PASS: test_returns_no_path_when_blocked
+PASS: test_start_equals_goal
+PASS: test_astar_matches_dijkstra_path_length
+PASS: test_astar_expands_fewer_nodes_than_dijkstra
+PASS: test_reroute_after_new_obstacle
+PASS: test_dynamic_weight_reduces_nodes (A*=44, Dijkstra=384)
+All tests passed.

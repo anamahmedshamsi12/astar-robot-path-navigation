@@ -1,41 +1,40 @@
 /*
  * benchmark.c
  *
- * Empirical performance comparison between A* and Dijkstra.
- * Measures nodes expanded and average runtime (microseconds) for each
- * algorithm across six grid sizes and prints the results as CSV.
- * Output is saved in outputs/benchmark_results.csv.
+ * Runs three empirical experiments comparing A* with dynamic weight
+ * coefficient against Dijkstra's algorithm:
+ *
+ *   Experiment 1: Grid size scaling (10x10 to 60x60 in steps of 5)
+ *     Output: outputs/benchmark_grid_size.csv
+ *
+ *   Experiment 2: Obstacle density scaling (0% to 40% on a 30x30 grid)
+ *     Output: outputs/benchmark_obstacle_density.csv
+ *
+ *   Experiment 3: Initial planning vs replanning timing
+ *     Inspired by the rerouting experiments in Hu et al. [2].
+ *     Output: outputs/benchmark_replan.csv
  *
  * To run: make bench
  */
 
 #include "astar.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
+static double elapsed_us(clock_t start, clock_t end) {
+    return (double)(end - start) / (double)CLOCKS_PER_SEC * 1000000.0;
+}
+
 /*
- * build_corridor_grid() creates a grid with two vertical walls and gaps
- * that scale proportionally with the grid size.
- *
- * Wall 1: column = size/3,   rows 1 to size-2, gap at row size-3
- * Wall 2: column = 2*size/3, rows 2 to size-2, gap at row 2
- *
- * We use a structured obstacle layout instead of an open grid because
- * on an open grid both algorithms expand a very similar band of cells
- * and the heuristic advantage of A* is barely visible. The two corridors
- * force Dijkstra to waste effort exploring cells in the wrong direction
- * while A*'s heuristic keeps it focused toward the goal. This makes the
- * difference in nodes_expanded between the two algorithms clearly measurable
- * and consistent across all six grid sizes.
- *
- * Integer division (size/3 and 2*size/3) scales the wall positions with
- * the grid size so the layout stays proportionally consistent whether the
- * grid is 10x10 or 60x60.
+ * build_corridor_grid() creates a structured grid with two vertical walls
+ * and gaps that scale with size. Used for Experiments 1 and 3.
+ * The corridor layout forces both algorithms to navigate through specific
+ * openings, making the heuristic advantage clearly measurable.
  */
 static void build_corridor_grid(Grid* grid, int size) {
     int row;
     grid_init(grid, size, size);
-
     for (row = 1; row < size - 1; row++) {
         if (row != size - 3) {
             grid_set_cell(grid, (Point){row, size / 3}, 1);
@@ -49,99 +48,175 @@ static void build_corridor_grid(Grid* grid, int size) {
 }
 
 /*
- * elapsed_seconds() converts two clock_t tick counts into elapsed time
- * as a double-precision floating-point number in seconds.
- *
- * clock() returns CPU ticks. Dividing by CLOCKS_PER_SEC converts to seconds.
- * We cast to double before dividing to avoid integer division truncation —
- * if both operands were integers, any elapsed time shorter than one second
- * would round down to zero, making the measurement useless.
+ * build_random_grid() creates a 30x30 grid with randomly placed obstacles
+ * at the given density. A fixed seed ensures results are reproducible.
+ * Start (0,0) and goal (size-1, size-1) are always kept open.
+ * Used for Experiment 2. This matches the experimental approach of
+ * Chatzisavvas et al. [1] who test on grids with about 20% obstacle density.
  */
-static double elapsed_seconds(clock_t start, clock_t end) {
-    return (double)(end - start) / (double)CLOCKS_PER_SEC;
+static void build_random_grid(Grid* grid, int size, double density, unsigned int seed) {
+    int r, c;
+    srand(seed);
+    grid_init(grid, size, size);
+    for (r = 0; r < size; r++) {
+        for (c = 0; c < size; c++) {
+            if ((r == 0 && c == 0) || (r == size-1 && c == size-1)) {
+                continue;
+            }
+            if ((double)rand() / RAND_MAX < density) {
+                grid_set_cell(grid, (Point){r, c}, 1);
+            }
+        }
+    }
 }
 
-/*
- * main() benchmarks A* and Dijkstra across 6 grid sizes and prints
- * one CSV row per size matching the header:
- *   grid_size, astar_nodes, dijkstra_nodes, astar_time_us, dijkstra_time_us
- *
- * For each grid size we:
- *   1. Build the corridor grid.
- *   2. Run each algorithm once (untimed) to capture node counts.
- *   3. Run each algorithm 2000 times inside a clock() bracket.
- *   4. Compute average microseconds per run and print the CSV row.
- *
- * We use 2000 repetitions because a single search on a small grid runs in
- * roughly 5-25 microseconds — well below the ~1ms resolution of many system
- * clocks. Averaging over 2000 runs gives a total measurement of 10-50ms,
- * which clock() can measure accurately. This reduces noise from OS scheduling
- * and gives stable, reproducible timing data.
- *
- * nodes_expanded is the primary metric because it directly counts algorithmic
- * work independent of hardware speed. Timing confirms the pattern on real
- * hardware and accounts for constant factors that Big-O analysis abstracts away.
- * Together they give a complete picture of the performance difference.
- */
 int main(void) {
-    int sizes[] = {10, 20, 30, 40, 50, 60};
-    int count = (int)(sizeof(sizes) / sizeof(sizes[0]));
-    int i;
+    int r, i;
+    int repeats = 2000;
 
-    printf("grid_size,astar_nodes,dijkstra_nodes,astar_time_us,dijkstra_time_us\n");
+    /* ── EXPERIMENT 1: Grid Size Scaling ─────────────────────────────────── */
+    {
+        int sizes[] = {10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60};
+        int num_sizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
+        FILE* f = fopen("outputs/benchmark_grid_size.csv", "w");
+        if (!f) { printf("ERROR: cannot open benchmark_grid_size.csv\n"); return 1; }
+        fprintf(f, "grid_size,astar_nodes,dijkstra_nodes,astar_time_us,dijkstra_time_us\n");
 
-    for (i = 0; i < count; i++) {
-        Grid grid;
-        SearchResult a_result;
-        SearchResult d_result;
-        Point start = {0, 0};
-        Point goal  = {sizes[i] - 1, sizes[i] - 1};
-        int repeats = 2000;
-        int r;
-        clock_t a_begin, a_end;
-        clock_t d_begin, d_end;
-        double a_us, d_us;
+        for (i = 0; i < num_sizes; i++) {
+            Grid grid;
+            SearchResult a_result, d_result;
+            Point start = {0, 0};
+            Point goal  = {sizes[i]-1, sizes[i]-1};
+            clock_t a_begin, a_end, d_begin, d_end;
 
-        build_corridor_grid(&grid, sizes[i]);
-
-        /* one untimed run to record node counts without timing overhead */
-        astar_search(&grid, start, goal, &a_result);
-        dijkstra_search(&grid, start, goal, &d_result);
-
-        /* time A*: record start tick, run 2000 times, record end tick */
-        a_begin = clock();
-        for (r = 0; r < repeats; r++) {
+            build_corridor_grid(&grid, sizes[i]);
             astar_search(&grid, start, goal, &a_result);
-        }
-        a_end = clock();
-
-        /* time Dijkstra: same structure for a fair side-by-side comparison */
-        d_begin = clock();
-        for (r = 0; r < repeats; r++) {
             dijkstra_search(&grid, start, goal, &d_result);
+
+            a_begin = clock();
+            for (r = 0; r < repeats; r++) astar_search(&grid, start, goal, &a_result);
+            a_end = clock();
+
+            d_begin = clock();
+            for (r = 0; r < repeats; r++) dijkstra_search(&grid, start, goal, &d_result);
+            d_end = clock();
+
+            fprintf(f, "%d,%d,%d,%.3f,%.3f\n",
+                    sizes[i],
+                    a_result.nodes_expanded,
+                    d_result.nodes_expanded,
+                    elapsed_us(a_begin, a_end) / repeats,
+                    elapsed_us(d_begin, d_end) / repeats);
         }
-        d_end = clock();
-
-        /*
-         * Convert total ticks to average microseconds per run:
-         *   total_seconds = (end - start) / CLOCKS_PER_SEC
-         *   total_us      = total_seconds * 1,000,000
-         *   average_us    = total_us / repeats
-         *
-         * Reporting in microseconds gives more readable numbers than
-         * seconds for operations this fast, and makes it easier to compare
-         * A* and Dijkstra side by side in the paper's empirical table.
-         */
-        a_us = elapsed_seconds(a_begin, a_end) * 1000000.0 / repeats;
-        d_us = elapsed_seconds(d_begin, d_end) * 1000000.0 / repeats;
-
-        printf("%d,%d,%d,%.3f,%.3f\n",
-               sizes[i],
-               a_result.nodes_expanded,
-               d_result.nodes_expanded,
-               a_us,
-               d_us);
+        fclose(f);
+        printf("Saved outputs/benchmark_grid_size.csv\n");
     }
 
+    /* ── EXPERIMENT 2: Obstacle Density Scaling ──────────────────────────── */
+    {
+        double densities[] = {0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40};
+        int num_densities = (int)(sizeof(densities) / sizeof(densities[0]));
+        int grid_size = 30;
+        FILE* f = fopen("outputs/benchmark_obstacle_density.csv", "w");
+        if (!f) { printf("ERROR: cannot open benchmark_obstacle_density.csv\n"); return 1; }
+        fprintf(f, "obstacle_pct,astar_nodes,dijkstra_nodes,astar_time_us,dijkstra_time_us\n");
+
+        for (i = 0; i < num_densities; i++) {
+            Grid grid;
+            SearchResult a_result, d_result;
+            Point start = {0, 0};
+            Point goal  = {grid_size-1, grid_size-1};
+            clock_t a_begin, a_end, d_begin, d_end;
+
+            build_random_grid(&grid, grid_size, densities[i], 42);
+
+            if (!astar_search(&grid, start, goal, &a_result)) {
+                fprintf(f, "%d,0,0,0,0\n", (int)(densities[i] * 100));
+                continue;
+            }
+            dijkstra_search(&grid, start, goal, &d_result);
+
+            a_begin = clock();
+            for (r = 0; r < repeats; r++) astar_search(&grid, start, goal, &a_result);
+            a_end = clock();
+
+            d_begin = clock();
+            for (r = 0; r < repeats; r++) dijkstra_search(&grid, start, goal, &d_result);
+            d_end = clock();
+
+            fprintf(f, "%d,%d,%d,%.3f,%.3f\n",
+                    (int)(densities[i] * 100),
+                    a_result.nodes_expanded,
+                    d_result.nodes_expanded,
+                    elapsed_us(a_begin, a_end) / repeats,
+                    elapsed_us(d_begin, d_end) / repeats);
+        }
+        fclose(f);
+        printf("Saved outputs/benchmark_obstacle_density.csv\n");
+    }
+
+    /* ── EXPERIMENT 3: Initial Planning vs Replanning ────────────────────── */
+    /*
+     * Measures how long A* takes for an initial search versus replanning
+     * after a new obstacle appears mid-route. Directly corresponds to the
+     * rerouting experiments in Hu et al. [2] and demonstrates that A* is
+     * fast enough for real-time dynamic replanning in robot navigation.
+     */
+    {
+        int sizes[] = {20, 30, 40, 50};
+        int num_sizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
+        FILE* f = fopen("outputs/benchmark_replan.csv", "w");
+        if (!f) { printf("ERROR: cannot open benchmark_replan.csv\n"); return 1; }
+        fprintf(f, "grid_size,initial_nodes,replan_nodes,initial_time_us,replan_time_us\n");
+
+        for (i = 0; i < num_sizes; i++) {
+            Grid grid;
+            Grid grid_blocked;
+            SearchResult initial_result, replan_result;
+            Point start = {0, 0};
+            Point goal  = {sizes[i]-1, sizes[i]-1};
+            Point replan_start, blocked;
+            clock_t t_begin, t_end;
+            double initial_us, replan_us;
+            int j;
+
+            build_corridor_grid(&grid, sizes[i]);
+            astar_search(&grid, start, goal, &initial_result);
+
+            t_begin = clock();
+            for (r = 0; r < repeats; r++) astar_search(&grid, start, goal, &initial_result);
+            t_end = clock();
+            initial_us = elapsed_us(t_begin, t_end) / repeats;
+
+            /* Make a copy of the grid, add a new obstacle, and replan */
+            grid_blocked = grid;
+            if (initial_result.path_length >= 6) {
+                replan_start = initial_result.path[3];
+                blocked      = initial_result.path[4];
+            } else {
+                replan_start = start;
+                blocked      = initial_result.path[1];
+            }
+            grid_set_cell(&grid_blocked, blocked, 1);
+
+            astar_search(&grid_blocked, replan_start, goal, &replan_result);
+
+            t_begin = clock();
+            for (j = 0; j < repeats; j++) astar_search(&grid_blocked, replan_start, goal, &replan_result);
+            t_end = clock();
+            replan_us = elapsed_us(t_begin, t_end) / repeats;
+
+            fprintf(f, "%d,%d,%d,%.3f,%.3f\n",
+                    sizes[i],
+                    initial_result.nodes_expanded,
+                    replan_result.nodes_expanded,
+                    initial_us,
+                    replan_us);
+        }
+        fclose(f);
+        printf("Saved outputs/benchmark_replan.csv\n");
+    }
+
+    printf("\nAll 3 benchmark experiments complete.\n");
     return 0;
 }
