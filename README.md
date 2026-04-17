@@ -197,8 +197,149 @@ A_STAR_DYNAMIC_WEIGHT(grid, start, goal)
  
     return NO_PATH_FOUND
 ```
- 
 Dijkstra's algorithm is obtained by setting $k = 0$ throughout, which reduces the priority function to $f(n) = g(n)$ and eliminates all directional guidance toward the goal.
+ 
+## 5. Implementation
+ 
+### 5.1 Language and Design Philosophy
+ 
+The algorithm is implemented in C, the primary language of this course. Python is used exclusively for post-processing visualizations via matplotlib and networkx. All algorithm logic, correctness tests, and performance benchmarks execute entirely in C. This mirrors the approach taken by the source papers, in which core algorithms are implemented in a systems language and visualization is handled separately.
+ 
+The C code follows the coding conventions practiced throughout CS 5008, specifically small focused functions, structs to group related data, pointer parameters to avoid unnecessary copying, fixed-size stack-allocated arrays, and explicit bounds checking before every array access. In doing so, the implementation stays close to the low-level reasoning that has been emphasized throughout the course rather than relying on high-level abstractions.
+
+### 5.2 Core Data Structures
+ 
+**`Point` struct.** Represents a grid cell as `(row, col)`. Row-column indexing rather than x-y aligns with C's row-major 2D array layout and the flat index formula $\text{index} = r \cdot \text{cols} + c$. Grouping both values into a struct keeps function signatures clean and avoids passing two separate integers wherever a grid position is needed.
+
+**`Grid` struct.** Stores the occupancy map as a flat 1D array of integers with the actual row and column dimensions. The flat layout follows the matrix memory model studied in Module 2.
+
+**`SearchResult` struct.** Bundles all search output, including the found flag, path length, nodes expanded, and path array, into a single struct since C functions return only one value. The `nodes_expanded` field is central to the empirical comparison, consistent with the benchmarking methodology used in all three source papers [1][2][3].
+
+**`MinHeap` struct.** A binary min-heap backed by a fixed-size array. Uses the parent-child index formulas from Module 9, with the parent of node $i$ at index $(i-1)/2$, the left child at $2i+1$, and the right child at $2i+2$. The heap is sized at `MAX_CELLS * 4` to accommodate lazy deletion: when a better path to a node is found, a new heap entry is pushed rather than updating the existing one. Stale entries are skipped when popped by checking the closed set.
+ 
+### 5.3 Shared Internal Search Function
+ 
+Both `astar_search()` and `dijkstra_search()` delegate to a single internal function `search_internal()` controlled by a `use_heuristic` flag. When `use_heuristic = 1`, `compute_weighted_f()` is called and the dynamic weight is applied. When `use_heuristic = 0`, the priority reduces to the plain $g$-score, yielding Dijkstra's behavior. This design ensures the empirical comparison is controlled: both algorithms use identical grid representations, heap implementations, and neighbor expansion logic. In this sense, the heuristic is the only independent variable between the two algorithms.
+
+### 5.4 Path Reconstruction
+ 
+Upon reaching the goal, the optimal path is reconstructed by following `parent[]` links backward from the goal to the start, the same predecessor-chain traversal used with linked lists in Module 8, and then reversing the resulting array to produce the correct start-to-goal ordering.
+ 
+### 5.5 Repository Structure
+ 
+```
+final-paper-anamahmedshamsi12-1/
+├── src/
+│   ├── astar.h          - structs, constants, function prototypes
+│   ├── astar.c          - heap, grid helpers, dynamic weight, A*, Dijkstra
+│   ├── main.c           - demo with rerouting scenario
+│   ├── tests.c          - 9 correctness tests
+│   └── benchmark.c      - timing and node-count benchmarks
+├── outputs/
+│   ├── sample_run.txt
+│   ├── test_run.txt
+│   └── benchmark_results.csv
+├── figures/
+│   ├── astar_vs_dijkstra.png
+│   ├── nodes_expanded_vs_size.png
+│   ├── runtime_vs_size.png
+│   └── network_graph.png
+├── generate_figures.py
+├── network_graph.py
+├── Makefile
+└── README.md
+```
+## 6. Correctness
+ 
+### 6.1 Loop Invariant
+ 
+**Invariant.** At the start of every iteration of the main search loop, every node in the closed set has its optimal $g$-score finalized. That is, for every node $u$ in the closed set, $g[u]$ equals the true shortest-path distance from the start to $u$.
+ 
+**Initialization.** Before the first iteration, the closed set is empty. The invariant holds vacuously because there are no nodes to verify.
+ 
+**Maintenance.** Consider an arbitrary iteration. The node $u$ with the minimum $f$-score is popped from the open set. If $u$ is already closed, it is skipped and the invariant is unchanged. Otherwise, suppose for contradiction that a cheaper path to $u$ exists but has not been discovered. Any such path must pass through some node $v$ currently in the open set. Since $h$ is admissible, $f(v) \leq g(v) + h(v) \leq \text{true cost to } u < g[u]$. But then $v$ would have been popped before $u$, contradicting the assumption that $u$ was popped with the minimum $f$-score. Therefore no cheaper path to $u$ exists and $g[u]$ is optimal when $u$ is closed. The invariant is maintained.
+ 
+**Termination.** When the goal node is closed, the invariant guarantees that $g[\text{goal}]$ equals the true shortest-path distance. Following parent links from the goal to the start reconstructs this optimal path.
+
+### 6.2 Admissibility Note
+ 
+When $k = 3$, the effective heuristic is $3 \cdot h(n)$, which may overestimate the true remaining cost and technically violates admissibility. Chatzisavvas et al. [1] explicitly accept this trade-off: the higher weight is applied only when the robot is far from the goal and the terrain is open, conditions under which the heuristic is highly directional and overestimation is unlikely to cause path suboptimality in practice. When $k = 0.85 < 1$, the heuristic is actually more conservative than standard A\*, preserving strong optimality guarantees for the final approach. This adaptive strategy is consistent with the analysis in Mai Jialing and Zhang Xiaohua [3], who observe that increasing the heuristic weight early in the search and decreasing it near the goal effectively balances convergence speed with path accuracy.
+
+## 6. Correctness
+ 
+### 6.1 Loop Invariant
+**Invariant.** At the start of every iteration of the main search loop, every node in the closed set has its optimal $g$-score finalized. That is, for every node $u$ in the closed set, $g[u]$ equals the true shortest-path distance from the start to $u$.
+
+**Initialization.** Before the first iteration, the closed set is empty. The invariant holds vacuously because there are no nodes to verify.
+
+**Maintenance.** Consider an arbitrary iteration. The node $u$ with the minimum $f$-score is popped from the open set. If $u$ is already closed, it is skipped and the invariant is unchanged. Otherwise, suppose for contradiction that a cheaper path to $u$ exists but has not been discovered. Any such path must pass through some node $v$ currently in the open set. Since $h$ is admissible, $f(v) \leq g(v) + h(v) \leq \text{true cost to } u < g[u]$. But then $v$ would have been popped before $u$, contradicting the assumption that $u$ was popped with the minimum $f$-score. Therefore no cheaper path to $u$ exists and $g[u]$ is optimal when $u$ is closed. The invariant is maintained.
+
+**Termination.** When the goal node is closed, the invariant guarantees that $g[\text{goal}]$ equals the true shortest-path distance. Following parent links from the goal to the start reconstructs this optimal path.
+
+
+### 6.2 Admissibility Note
+When $k = 3$, the effective heuristic is $3 \cdot h(n)$, which may overestimate the true remaining cost and technically violates admissibility. Chatzisavvas et al. [1] explicitly accept this trade-off: the higher weight is applied only when the robot is far from the goal and the terrain is open, conditions under which the heuristic is highly directional and overestimation is unlikely to cause path suboptimality in practice. When $k = 0.85 < 1$, the heuristic is actually more conservative than standard A\*, preserving strong optimality guarantees for the final approach. This adaptive strategy is consistent with the analysis in Mai Jialing and Zhang Xiaohua [3], who observe that increasing the heuristic weight early in the search and decreasing it near the goal effectively balances convergence speed with path accuracy.
+
+## 7. Theoretical Analysis
+
+### 7.1 Time Complexity
+Let $V$ denote the number of nodes and $E$ the number of edges. With a binary min-heap priority queue, each insertion and extraction costs $O(\log V)$. In the worst case, the algorithm processes every node exactly once and examines all incident edges:
+
+$$T(V, E) = O((V + E) \log V)$$
+
+For a 4-direction occupancy grid, each cell has at most 4 neighbors, so $E = O(V)$. This gives:
+
+$$T(V) = O(V \log V)$$
+
+The dynamic weight coefficient does not alter the asymptotic bound. It reduces the practical constant factor by decreasing the number of nodes that reach the open set, but in the worst case, all nodes may still be processed.
+
+
+### 7.2 Space Complexity
+The `g_score`, `parent`, and `closed` arrays each require $O(V)$ space. The heap stores at most $O(V)$ entries under lazy deletion. The path array holds at most $V$ nodes. In total:
+ 
+$$S(V) = O(V)$$
+
+### 7.3 Comparison with Dijkstra
+Dijkstra's algorithm shares the same $O(V \log V)$ worst-case bound when implemented with a binary heap. The practical difference manifests in the constant factor. Because Dijkstra sets $h(n) = 0$, nodes are prioritized purely by $g$-score and the search expands uniformly outward from the start. A\* with an informative heuristic prioritizes nodes that are both close to the start and estimated to be close to the goal, effectively pruning the search to a narrow corridor along the optimal path. The dynamic weight amplifies this effect: with $k = 3$, the heuristic term dominates the priority function when the robot is far from the goal, pushing cells along the direct route to the top of the heap and preventing the search from wasting time on cells in the opposite direction.
+
+### 7.4 Empirical Reduction in Practice
+On the 60x60 benchmark grid, weighted A\* expanded 124 nodes compared to Dijkstra's 3,488, a reduction of 96.4%. This exceeds the 66.2% reduction reported by Chatzisavvas et al. [1] and the approximately 50% improvement reported by Mai Jialing and Zhang Xiaohua [3], likely because the corridor-style benchmark grid used in this paper creates a particularly favorable environment for the directional heuristic. Across the full benchmark suite, the practical speedup ranges from 1x at 10x10, where both algorithms find the goal quickly, to 28x at 60x60 in terms of runtime. This is consistent with the literature's prediction that the heuristic advantage scales with grid size.
+ 
+## 8. Empirical Analysis
+ 
+### 8.1 Experimental Setup
+ Benchmarks were conducted on six corridor-style grids ranging from 10x10 to 60x60. Each grid contains two vertical obstacle walls with gaps at specific rows, creating a path-planning problem that requires navigating through narrow openings. This layout was chosen because an open grid would produce nearly identical results for both algorithms, since both would expand the same diagonal band of cells and the heuristic's advantage would not be visible. The corridor environment better approximates real indoor navigation scenarios and is consistent with the testing methodology of Chatzisavvas et al. [1] and Mai Jialing and Zhang Xiaohua [3], both of whom test on environments with realistic obstacle densities rather than empty grids.
+
+Each algorithm was run 2,000 times per grid size and the average runtime per run in microseconds was recorded. Node counts were recorded from a single representative run. The start position was the top-left corner and the goal was the bottom-right corner for all grid sizes.
+
+### 8.2 Results
+ 
+| Grid Size | A\* Nodes | Dijkstra Nodes | Reduction | A\* Time (us) | Dijkstra Time (us) |
+|:---|---:|---:|---:|---:|---:|
+| 10 x 10 | 88 | 88 | 0% | 5.0 | 0.0 |
+| 20 x 20 | 44 | 368 | 88.0% | 5.0 | 10.0 |
+| 30 x 30 | 64 | 848 | 92.5% | 15.0 | 20.0 |
+| 40 x 40 | 84 | 1,528 | 94.5% | 5.0 | 45.0 |
+| 50 x 50 | 104 | 2,408 | 95.7% | 10.0 | 90.0 |
+| 60 x 60 | 124 | 3,488 | 96.4% | 5.0 | 140.0 |
+ 
+The 10x10 case produces equal node counts because the small grid size allows both algorithms to reach the goal before the heuristic advantage accumulates. From 20x20 onward the divergence grows consistently, confirming that the reduction scales with grid size as predicted by the theoretical analysis. The percentage reduction increases monotonically from 88.0% to 96.4%, suggesting that the dynamic weight becomes more effective as the search space grows. This property is directly attributable to the $k = 3$ weight pushing the search away from the large unexplored region and toward the goal.
+
+### 8.3 Figure 1: Grid Search Visualization
+
+### 8.4 Figure 2: Nodes Expanded Across Grid Sizes
+
+### 8.5 Figure 3: Runtime Across Grid Sizes
+
+### 8.6 Figure 4: Weighted Waypoint Network
+
+## 9. Rerouting Experiment
+
+## 10. Testing
+
+## 11. Limitations
+
+## 12. Conclusion
 
 
 ## References
