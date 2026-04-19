@@ -1,13 +1,11 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.patheffects as pe
 import numpy as np
 import heapq
 import os
 
 os.makedirs("figures", exist_ok=True)
 
-# ── Grid ──────────────────────────────────────────────────────────────────────
 GRID = [
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,1,1,1,1,0,0,1,1,1,1,0,0,1,1,0,0,1,1,0],
@@ -31,7 +29,7 @@ GRID = [
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ]
 ROWS, COLS = 20, 20
-START = (0,  0)
+START = (0, 0)
 GOAL  = (19, 19)
 EC_THRESHOLD = 18
 WEIGHT_HIGH  = 3
@@ -45,11 +43,10 @@ def run_search(use_heuristic):
     g_score   = {START: 0}
     came_from = {}
     closed    = set()
-    open_set  = set([START])
 
     h0 = manhattan(START, GOAL)
     k  = WEIGHT_HIGH if h0 > EC_THRESHOLD else WEIGHT_LOW
-    f0 = int(0 + k * h0) if use_heuristic else 0
+    f0 = int(k * h0) if use_heuristic else 0
     heapq.heappush(open_heap, (f0, h0, START))
 
     while open_heap:
@@ -57,8 +54,6 @@ def run_search(use_heuristic):
         if current in closed:
             continue
         closed.add(current)
-        open_set.discard(current)
-
         if current == GOAL:
             path = []
             node = GOAL
@@ -67,7 +62,6 @@ def run_search(use_heuristic):
                 node = came_from[node]
             path.append(START)
             return list(closed), path
-
         r, c = current
         for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
             nr, nc = r+dr, c+dc
@@ -85,120 +79,119 @@ def run_search(use_heuristic):
                         else:
                             f = tg
                         heapq.heappush(open_heap, (f, h_val, nb))
-                        open_set.add(nb)
-
     return list(closed), []
 
-# Run both
 closed_a, path_a = run_search(True)
 closed_d, path_d = run_search(False)
 path_a_set = set(path_a)
 path_d_set = set(path_d)
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-COL_OBSTACLE = '#1a1a2e'
-COL_OPEN     = '#16213e'
-COL_CLOSED   = '#7c4dff'
-COL_PATH     = '#00e676'
-COL_START    = '#00b0ff'
-COL_GOAL     = '#ff1744'
-COL_BG       = '#0a0a14'
+# ── Clean academic color scheme ────────────────────────────────────────────────
+# Inspired by robotics research paper figures (light background, clear colors)
+COL_BG       = '#ffffff'   # white background
+COL_GRID     = '#cccccc'   # light gray grid lines
+COL_OPEN     = '#f5f5f5'   # very light gray - unvisited
+COL_OBSTACLE = '#2d2d2d'   # near black - obstacles
+COL_CLOSED_A = '#a8d8ea'   # light blue - A* explored
+COL_CLOSED_D = '#ffb347'   # orange - Dijkstra explored
+COL_PATH     = '#2ecc71'   # green - path
+COL_START    = '#3498db'   # blue - start
+COL_GOAL     = '#e74c3c'   # red - goal
 
-def cell_color(r, c, closed_set, path_set):
-    pos = (r, c)
-    if pos == START:       return COL_START
-    if pos == GOAL:        return COL_GOAL
-    if pos in path_set:    return COL_PATH
-    if pos in closed_set:  return COL_CLOSED
-    if GRID[r][c] == 1:    return COL_OBSTACLE
-    return COL_OPEN
+def draw_academic_grid(ax, closed_set, path_set, title, node_count,
+                       path_len, closed_color):
+    ax.set_facecolor(COL_BG)
+    ax.set_xlim(-0.5, COLS - 0.5)
+    ax.set_ylim(-0.5, ROWS - 0.5)
+    ax.set_aspect('equal')
 
-def draw_grid(ax, closed_set, path_set, title, node_count, path_len):
-    ax.set_facecolor('#0a0a14')
+    # Draw grid lines
+    for i in range(ROWS + 1):
+        ax.axhline(i - 0.5, color=COL_GRID, linewidth=0.3, zorder=1)
+    for j in range(COLS + 1):
+        ax.axvline(j - 0.5, color=COL_GRID, linewidth=0.3, zorder=1)
+
+    # Draw cells
     for r in range(ROWS):
         for c in range(COLS):
-            color = cell_color(r, c, closed_set, path_set)
-            # Make path cells slightly larger/brighter by drawing them on top
-            if (r, c) in path_set and (r, c) != START and (r, c) != GOAL:
-                rect = plt.Rectangle([c, ROWS-r-1], 0.95, 0.95,
-                                     facecolor=color, edgecolor='#00ff88',
-                                     linewidth=0.8, zorder=3)
+            pos = (r, c)
+            if pos == START:
+                color = COL_START
+            elif pos == GOAL:
+                color = COL_GOAL
+            elif pos in path_set:
+                color = COL_PATH
+            elif GRID[r][c] == 1:
+                color = COL_OBSTACLE
+            elif pos in closed_set:
+                color = closed_color
             else:
-                rect = plt.Rectangle([c, ROWS-r-1], 0.92, 0.92,
-                                     facecolor=color, edgecolor='#0a0a14',
-                                     linewidth=0.4, zorder=2)
+                color = COL_OPEN
+
+            rect = plt.Rectangle([c - 0.5, r - 0.5], 1.0, 1.0,
+                                  facecolor=color, edgecolor='none',
+                                  zorder=2)
             ax.add_patch(rect)
 
-    ax.set_xlim(0, COLS)
-    ax.set_ylim(0, ROWS)
-    ax.set_aspect('equal')
-    ax.axis('off')
+    # Start and goal labels
+    ax.text(START[1], START[0], 'S', color='white', fontsize=7,
+            fontweight='bold', ha='center', va='center', zorder=5)
+    ax.text(GOAL[1], GOAL[0], 'G', color='white', fontsize=7,
+            fontweight='bold', ha='center', va='center', zorder=5)
 
-    # Title with node count annotation
-    ax.set_title(title, color='white', fontsize=12,
-                 fontweight='bold', pad=6)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#999999')
+        spine.set_linewidth(0.8)
 
-    # Annotation box bottom center — nodes expanded
-    ax.text(COLS / 2, -0.8,
+    ax.set_title(title, fontsize=11, fontweight='bold', color='#222222', pad=8)
+    ax.text(0.5, -0.04,
             f"Nodes expanded: {node_count}   |   Path length: {path_len} cells",
-            color='white', fontsize=9.5, ha='center', va='top',
-            bbox=dict(boxstyle='round,pad=0.4', facecolor='#1a1a2e',
-                      edgecolor='#444466', alpha=0.9))
+            transform=ax.transAxes,
+            fontsize=9, ha='center', color='#444444')
 
-    # Mark start and goal with text labels
-    ax.text(0.5, ROWS - 0 - 0.5, 'S', color='white', fontsize=8,
-            fontweight='bold', ha='center', va='center', zorder=5)
-    ax.text(COLS - 0.5, 0.5, 'G', color='white', fontsize=8,
-            fontweight='bold', ha='center', va='center', zorder=5)
+# ── Figure 1: Side by side comparison ─────────────────────────────────────────
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7),
+                                facecolor='white')
+fig.patch.set_facecolor('white')
 
-# ── Figure 1: Side by side A* vs Dijkstra ─────────────────────────────────────
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 8),
-                                facecolor=COL_BG)
+draw_academic_grid(ax1, set(closed_a), path_a_set,
+                   "A*  (dynamic weight: k=3 far, k=0.85 near)",
+                   len(closed_a), len(path_a), COL_CLOSED_A)
+
+draw_academic_grid(ax2, set(closed_d), path_d_set,
+                   "Dijkstra's  (no heuristic)",
+                   len(closed_d), len(path_d), COL_CLOSED_D)
+
+reduction = 100.0 * (len(closed_d) - len(closed_a)) / len(closed_d)
 fig.suptitle(
     "A* with Dynamic Weight Coefficient  vs  Dijkstra's Algorithm\n"
-    "Purple = nodes processed   Bright green = optimal path   "
-    "Cyan = start   Red = goal",
-    color='white', fontsize=12, fontweight='bold', y=1.01)
-
-draw_grid(ax1, set(closed_a), path_a_set,
-          "A*  (k=3 far from goal, k=0.85 near goal)",
-          len(closed_a), len(path_a))
-
-draw_grid(ax2, set(closed_d), path_d_set,
-          "Dijkstra's  (no heuristic, k=0)",
-          len(closed_d), len(path_d))
-
-# Reduction annotation between panels
-reduction = 100.0 * (len(closed_d) - len(closed_a)) / len(closed_d)
-fig.text(0.5, 0.01,
-         f"Node reduction: {len(closed_d) - len(closed_a)} fewer nodes  "
-         f"({reduction:.1f}% reduction)  |  Same path length: "
-         f"{'yes' if len(path_a) == len(path_d) else 'no'}",
-         color='#00e676', fontsize=11, fontweight='bold',
-         ha='center', va='bottom',
-         bbox=dict(boxstyle='round,pad=0.5', facecolor='#0f0f1a',
-                   edgecolor='#00e676', alpha=0.9))
+    f"Node reduction: {len(closed_d) - len(closed_a)} fewer nodes "
+    f"({reduction:.1f}% reduction)   |   Same path length: "
+    f"{'yes' if len(path_a) == len(path_d) else 'no'}",
+    fontsize=12, fontweight='bold', color='#222222', y=1.01)
 
 legend_items = [
-    mpatches.Patch(color=COL_START,   label='Start (S)'),
-    mpatches.Patch(color=COL_GOAL,    label='Goal (G)'),
-    mpatches.Patch(color=COL_PATH,    label='Optimal path'),
-    mpatches.Patch(color=COL_CLOSED,  label='Nodes processed'),
-    mpatches.Patch(color=COL_OBSTACLE,label='Obstacle'),
-    mpatches.Patch(color=COL_OPEN,    label='Not reached'),
+    mpatches.Patch(color=COL_START,    label='Start (S)'),
+    mpatches.Patch(color=COL_GOAL,     label='Goal (G)'),
+    mpatches.Patch(color=COL_PATH,     label='Optimal path'),
+    mpatches.Patch(color=COL_CLOSED_A, label='A* explored'),
+    mpatches.Patch(color=COL_CLOSED_D, label="Dijkstra's explored"),
+    mpatches.Patch(color=COL_OBSTACLE, label='Obstacle'),
+    mpatches.Patch(color=COL_OPEN,     label='Not reached'),
 ]
-fig.legend(handles=legend_items, loc='lower center', ncol=6,
-           facecolor='#1a1a2e', edgecolor='none',
-           labelcolor='white', fontsize=9.5,
-           bbox_to_anchor=(0.5, 0.06))
+fig.legend(handles=legend_items, loc='lower center', ncol=7,
+           facecolor='white', edgecolor='#cccccc',
+           fontsize=9, bbox_to_anchor=(0.5, -0.04))
 
-plt.tight_layout(rect=[0, 0.12, 1, 1])
+plt.tight_layout(rect=[0, 0.06, 1, 1])
 plt.savefig('figures/astar_vs_dijkstra.png', dpi=150,
-            bbox_inches='tight', facecolor=COL_BG)
+            bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved figures/astar_vs_dijkstra.png")
 
-# ── Figure 2: nodes expanded bar chart ────────────────────────────────────────
+# ── Figure 2: nodes expanded bar chart (clean white style) ────────────────────
 sizes       = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 astar_nodes = [88, 94, 44, 54, 64, 74, 84, 94, 104, 114, 124]
 dijk_nodes  = [88, 203, 368, 583, 848, 1163, 1528, 1943, 2408, 2923, 3488]
@@ -206,39 +199,39 @@ labels      = [f"{s}x{s}" for s in sizes]
 x     = np.arange(len(sizes))
 width = 0.35
 
-fig, ax = plt.subplots(figsize=(12, 6), facecolor=COL_BG)
-ax.set_facecolor('#0f0f1a')
+fig, ax = plt.subplots(figsize=(12, 6), facecolor='white')
+ax.set_facecolor('white')
 bars1 = ax.bar(x - width/2, astar_nodes, width,
-               label='A* (dynamic weight k)', color='#7c4dff', zorder=3)
-bars2 = ax.bar(x + width/2, dijk_nodes,  width,
-               label="Dijkstra's", color='#f5a623', zorder=3)
+               label='A* (dynamic weight k)', color='#3498db',
+               edgecolor='#2980b9', linewidth=0.5)
+bars2 = ax.bar(x + width/2, dijk_nodes, width,
+               label="Dijkstra's", color='#e67e22',
+               edgecolor='#d35400', linewidth=0.5)
 
-# Annotate top of each bar
 for bar in bars1:
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 20,
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 15,
             str(int(bar.get_height())), ha='center', va='bottom',
-            color='#7c4dff', fontsize=7, fontweight='bold')
+            color='#2980b9', fontsize=7, fontweight='bold')
 for bar in bars2:
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 20,
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 15,
             str(int(bar.get_height())), ha='center', va='bottom',
-            color='#f5a623', fontsize=7, fontweight='bold')
+            color='#d35400', fontsize=7, fontweight='bold')
 
-ax.set_xlabel('Grid Size', color='white', fontsize=11)
-ax.set_ylabel('Nodes Expanded', color='white', fontsize=11)
+ax.set_xlabel('Grid Size', fontsize=11)
+ax.set_ylabel('Nodes Expanded', fontsize=11)
 ax.set_title("Experiment 1: Nodes Expanded vs Grid Size\n"
              "A* with Dynamic Weight vs Dijkstra's Algorithm",
-             color='white', fontweight='bold', fontsize=12)
+             fontsize=12, fontweight='bold')
 ax.set_xticks(x)
-ax.set_xticklabels(labels, color='white', rotation=30)
-ax.tick_params(colors='white')
-ax.yaxis.grid(True, linestyle='--', alpha=0.3, color='white', zorder=0)
+ax.set_xticklabels(labels, rotation=30)
+ax.yaxis.grid(True, linestyle='--', alpha=0.5, color='#cccccc')
 ax.set_axisbelow(True)
-ax.legend(facecolor='#1a1a2e', edgecolor='none', labelcolor='white', fontsize=10)
+ax.legend(fontsize=10)
 for spine in ax.spines.values():
-    spine.set_edgecolor('#333355')
+    spine.set_edgecolor('#cccccc')
 plt.tight_layout()
 plt.savefig('figures/nodes_expanded_vs_size.png', dpi=150,
-            bbox_inches='tight', facecolor=COL_BG)
+            bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved figures/nodes_expanded_vs_size.png")
 
@@ -246,80 +239,50 @@ print("Saved figures/nodes_expanded_vs_size.png")
 astar_time = [5, 5, 15, 5, 5, 5, 5, 10, 10, 10, 10]
 dijk_time  = [5, 5, 10, 20, 30, 45, 60, 85, 110, 155, 180]
 
-fig, ax = plt.subplots(figsize=(12, 6), facecolor=COL_BG)
-ax.set_facecolor('#0f0f1a')
-bars1 = ax.bar(x - width/2, astar_time, width,
-               label='A* (dynamic weight k)', color='#7c4dff', zorder=3)
-bars2 = ax.bar(x + width/2, dijk_time,  width,
-               label="Dijkstra's", color='#f5a623', zorder=3)
-
-for bar in bars2:
-    h = bar.get_height()
-    if h > 0:
-        ax.text(bar.get_x() + bar.get_width()/2, h + 1.5,
-                f"{h:.0f}", ha='center', va='bottom',
-                color='#f5a623', fontsize=7, fontweight='bold')
-
-ax.set_xlabel('Grid Size', color='white', fontsize=11)
-ax.set_ylabel('Avg Runtime (microseconds)', color='white', fontsize=11)
+fig, ax = plt.subplots(figsize=(12, 6), facecolor='white')
+ax.set_facecolor('white')
+ax.bar(x - width/2, astar_time, width,
+       label='A* (dynamic weight k)', color='#3498db',
+       edgecolor='#2980b9', linewidth=0.5)
+ax.bar(x + width/2, dijk_time, width,
+       label="Dijkstra's", color='#e67e22',
+       edgecolor='#d35400', linewidth=0.5)
+ax.set_xlabel('Grid Size', fontsize=11)
+ax.set_ylabel('Avg Runtime (microseconds)', fontsize=11)
 ax.set_title("Experiment 1: Runtime vs Grid Size\n"
              "A* with Dynamic Weight vs Dijkstra's Algorithm",
-             color='white', fontweight='bold', fontsize=12)
+             fontsize=12, fontweight='bold')
 ax.set_xticks(x)
-ax.set_xticklabels(labels, color='white', rotation=30)
-ax.tick_params(colors='white')
-ax.yaxis.grid(True, linestyle='--', alpha=0.3, color='white', zorder=0)
+ax.set_xticklabels(labels, rotation=30)
+ax.yaxis.grid(True, linestyle='--', alpha=0.5, color='#cccccc')
 ax.set_axisbelow(True)
-ax.legend(facecolor='#1a1a2e', edgecolor='none', labelcolor='white', fontsize=10)
+ax.legend(fontsize=10)
 for spine in ax.spines.values():
-    spine.set_edgecolor('#333355')
+    spine.set_edgecolor('#cccccc')
 plt.tight_layout()
 plt.savefig('figures/runtime_vs_size.png', dpi=150,
-            bbox_inches='tight', facecolor=COL_BG)
+            bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved figures/runtime_vs_size.png")
 
-# ── Figure 4: grid path only ───────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(7, 7), facecolor=COL_BG)
-ax.set_facecolor(COL_BG)
-for r in range(ROWS):
-    for c in range(COLS):
-        color = cell_color(r, c, set(closed_a), path_a_set)
-        if (r,c) in path_a_set and (r,c) != START and (r,c) != GOAL:
-            rect = plt.Rectangle([c, ROWS-r-1], 0.95, 0.95,
-                                 facecolor=color, edgecolor='#00ff88',
-                                 linewidth=0.8, zorder=3)
-        else:
-            rect = plt.Rectangle([c, ROWS-r-1], 0.92, 0.92,
-                                 facecolor=color, edgecolor='#0a0a14',
-                                 linewidth=0.4, zorder=2)
-        ax.add_patch(rect)
-
-ax.text(0.5, ROWS - 0.5, 'S', color='white', fontsize=9,
-        fontweight='bold', ha='center', va='center', zorder=5)
-ax.text(COLS - 0.5, 0.5, 'G', color='white', fontsize=9,
-        fontweight='bold', ha='center', va='center', zorder=5)
-
-ax.set_xlim(0, COLS)
-ax.set_ylim(0, ROWS)
-ax.set_aspect('equal')
-ax.axis('off')
-ax.set_title(f"A* Path on 20x20 Grid\n"
-             f"Nodes expanded: {len(closed_a)}   Path length: {len(path_a)} cells",
-             color='white', fontsize=11, fontweight='bold', pad=10)
-
+# ── Figure 4: standalone grid path ────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(7, 7), facecolor='white')
+draw_academic_grid(ax, set(closed_a), path_a_set,
+                   f"A* Path on 20x20 Grid\n"
+                   f"Nodes expanded: {len(closed_a)}   Path: {len(path_a)} cells",
+                   len(closed_a), len(path_a), COL_CLOSED_A)
 legend = [
-    mpatches.Patch(color=COL_START,   label='Start'),
-    mpatches.Patch(color=COL_GOAL,    label='Goal'),
-    mpatches.Patch(color=COL_PATH,    label='Optimal path'),
-    mpatches.Patch(color=COL_CLOSED,  label='Nodes processed'),
-    mpatches.Patch(color=COL_OBSTACLE,label='Obstacle'),
+    mpatches.Patch(color=COL_START,    label='Start'),
+    mpatches.Patch(color=COL_GOAL,     label='Goal'),
+    mpatches.Patch(color=COL_PATH,     label='Optimal path'),
+    mpatches.Patch(color=COL_CLOSED_A, label='Explored'),
+    mpatches.Patch(color=COL_OBSTACLE, label='Obstacle'),
 ]
 ax.legend(handles=legend, loc='lower left', fontsize=8,
-          facecolor='#1a1a2e', edgecolor='none', labelcolor='white')
+          facecolor='white', edgecolor='#cccccc')
 plt.tight_layout()
 plt.savefig('figures/grid_path.png', dpi=150,
-            bbox_inches='tight', facecolor=COL_BG)
+            bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved figures/grid_path.png")
 

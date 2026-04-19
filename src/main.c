@@ -1,22 +1,19 @@
 /*
  * main.c
  *
- * A* Robot Navigation Demo with command-line interface.
+ * Demo program for A* Search Algorithm with dynamic weight coefficient.
+ * Runs A* and Dijkstra on a grid, prints results, and shows rerouting
+ * when a new obstacle appears mid-path. Inspired by the rerouting
+ * experiments described in Hu et al. [2].
  *
- * Demonstrates A* with dynamic weight coefficient from Chatzisavvas et al. [1]
- * on a 2D occupancy grid. Supports verbose mode showing the robot moving
- * step by step and a rerouting scenario when a new obstacle appears.
+ * Supports command line flags similar to the speed comparison assignment:
+ *   -h, --help         print help and exit
+ *   -v, --verbose      show robot moving step by step
+ *   -g, --grid SIZE    set grid size between 4 and 20 (default 8)
+ *   -s, --scenario N   1 = basic path only, 2 = reroute demo (default 2)
  *
- * Usage:
- *   ./demo [OPTIONS]
- *
- * Options:
- *   -h, --help          Print this help message
- *   -v, --verbose       Show robot moving step by step
- *   -g, --grid SIZE     Set grid size (default: 8, max: 20)
- *   -s, --scenario N    Run scenario 1 (basic) or 2 (reroute, default: 2)
- *
- * Example:
+ * Examples:
+ *   ./demo -h
  *   ./demo -v
  *   ./demo -v -g 12
  *   ./demo -s 1
@@ -29,20 +26,28 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ── Global flags ─────────────────────────────────────────────────────────── */
+/*
+ * Global flags set by command line arguments.
+ * VERBOSE controls whether the robot moves are printed step by step.
+ * GRID_SIZE sets the dimensions of the demo grid.
+ * SCENARIO selects which demo to run.
+ */
 static int VERBOSE   = 0;
 static int GRID_SIZE = 8;
 static int SCENARIO  = 2;
 
-/* ── Help ─────────────────────────────────────────────────────────────────── */
+/*
+ * print_help() prints usage information and exits.
+ * Called when -h or --help is passed on the command line.
+ */
 static void print_help(void) {
     printf("Usage: ./demo [OPTIONS]\n\n");
     printf("Demonstrates A* pathfinding with dynamic weight coefficient\n");
     printf("for robot navigation on a 2D occupancy grid.\n\n");
     printf("Based on:\n");
-    printf("  [1] Chatzisavvas et al., Electronics 2024 -- dynamic weight k\n");
-    printf("  [2] Hu et al., ACM EPCE 2022              -- rerouting scenario\n");
-    printf("  [3] Mai Jialing et al., ACM ACMLC 2025    -- improved heuristic\n\n");
+    printf("  [1] Chatzisavvas et al., Electronics 2024\n");
+    printf("  [2] Hu et al., ACM EPCE 2022\n");
+    printf("  [3] Mai Jialing et al., ACM ACMLC 2025\n\n");
     printf("Options:\n");
     printf("  -h, --help          Print this help message\n");
     printf("  -v, --verbose       Show robot moving step by step\n");
@@ -54,7 +59,10 @@ static void print_help(void) {
     printf("  ./demo -s 1 -v\n\n");
 }
 
-/* ── Argument parsing ─────────────────────────────────────────────────────── */
+/*
+ * check_for_help() scans argv for -h or --help.
+ * Returns 1 if found, 0 otherwise.
+ */
 static int check_for_help(int argc, char** argv) {
     int i;
     for (i = 1; i < argc; i++) {
@@ -64,6 +72,10 @@ static int check_for_help(int argc, char** argv) {
     return 0;
 }
 
+/*
+ * process_args() parses the command line and sets the global flags.
+ * Unrecognized arguments are ignored silently.
+ */
 static void process_args(int argc, char** argv) {
     int i;
     for (i = 1; i < argc; i++) {
@@ -89,12 +101,11 @@ static void process_args(int argc, char** argv) {
     }
 }
 
-/* ── Grid helpers ─────────────────────────────────────────────────────────── */
-
 /*
  * load_demo_grid() builds the obstacle layout for the demo.
- * Walls simulate an indoor room a robot navigates through.
- * The layout scales with GRID_SIZE so the demo works at any size.
+ * Two vertical walls with gaps scale proportionally with GRID_SIZE
+ * so the layout stays consistent at any grid size between 4 and 20.
+ * Wall positions use integer division to stay proportional.
  */
 static void load_demo_grid(Grid* grid) {
     int size = GRID_SIZE;
@@ -114,6 +125,11 @@ static void load_demo_grid(Grid* grid) {
     }
 }
 
+/*
+ * point_in_path() does a linear search through the path array.
+ * Returns 1 if Point p appears anywhere in the result path, 0 otherwise.
+ * Used by print_grid to decide whether to draw a '*' at each cell.
+ */
 static int point_in_path(const SearchResult* result, Point p) {
     int i;
     for (i = 0; i < result->path_length; i++) {
@@ -123,8 +139,10 @@ static int point_in_path(const SearchResult* result, Point p) {
 }
 
 /*
- * print_grid() prints a visual map with optional path overlay.
- * If robot_pos is not NULL, prints R at the robot's current position.
+ * print_grid() prints a visual map of the grid with an optional path overlay.
+ * Symbols: S=start, G=goal, R=robot current position, #=obstacle, *=path, .=open.
+ * Passing result=NULL shows the map before any search.
+ * Passing robot_pos=NULL skips the robot marker.
  */
 static void print_grid(const Grid* grid, const SearchResult* result,
                         Point start, Point goal, const Point* robot_pos) {
@@ -134,11 +152,11 @@ static void print_grid(const Grid* grid, const SearchResult* result,
             Point p = {row, col};
             char symbol = '.';
 
-            if      (robot_pos != NULL && point_equal(p, *robot_pos))          symbol = 'R';
-            else if (point_equal(p, start))                                     symbol = 'S';
-            else if (point_equal(p, goal))                                      symbol = 'G';
-            else if (grid_is_blocked(grid, p))                                  symbol = '#';
-            else if (result && result->found && point_in_path(result, p))       symbol = '*';
+            if      (robot_pos != NULL && point_equal(p, *robot_pos))       symbol = 'R';
+            else if (point_equal(p, start))                                  symbol = 'S';
+            else if (point_equal(p, goal))                                   symbol = 'G';
+            else if (grid_is_blocked(grid, p))                               symbol = '#';
+            else if (result && result->found && point_in_path(result, p))    symbol = '*';
 
             printf("%c ", symbol);
         }
@@ -146,6 +164,10 @@ static void print_grid(const Grid* grid, const SearchResult* result,
     }
 }
 
+/*
+ * print_path_coordinates() prints the path as a sequence of (row,col) pairs
+ * separated by arrows so we can verify the path is a connected sequence.
+ */
 static void print_path_coordinates(const SearchResult* result) {
     int i;
     if (!result->found) { printf("  No path found.\n"); return; }
@@ -157,18 +179,12 @@ static void print_path_coordinates(const SearchResult* result) {
     printf("\n");
 }
 
-/* ── Separator helpers ────────────────────────────────────────────────────── */
-static void print_separator(void) {
-    printf("------------------------------------------------------------\n");
-}
-
-static void print_header(const char* title) {
-    printf("\n============================================================\n");
-    printf("  %s\n", title);
-    printf("============================================================\n");
-}
-
-/* ── Scenario 1: Basic path ───────────────────────────────────────────────── */
+/*
+ * run_scenario_basic() runs A* and Dijkstra on the demo grid and prints
+ * the results side by side. This directly shows the efficiency advantage
+ * of the dynamic weight coefficient from Chatzisavvas et al. [1].
+ * In verbose mode, the robot walks the path step by step.
+ */
 static void run_scenario_basic(void) {
     Grid grid;
     SearchResult astar_result;
@@ -176,7 +192,7 @@ static void run_scenario_basic(void) {
     Point start = {0, 0};
     Point goal  = {GRID_SIZE - 1, GRID_SIZE - 1};
 
-    print_header("Scenario 1: A* vs Dijkstra Pathfinding");
+    printf("\nScenario 1: A* vs Dijkstra Pathfinding\n");
     printf("Grid size: %dx%d\n", GRID_SIZE, GRID_SIZE);
     printf("Dynamic weight: k=3 when EC>%d (far from goal), "
            "k=0.85 when EC<=%d (near goal)\n", EC_THRESHOLD, EC_THRESHOLD);
@@ -188,30 +204,27 @@ static void run_scenario_basic(void) {
     print_grid(&grid, NULL, start, goal, NULL);
     printf("\n");
 
-    print_separator();
     printf("Running A* with dynamic weight coefficient...\n");
     astar_search(&grid, start, goal, &astar_result);
-    printf("  Found:          %s\n",   astar_result.found ? "yes" : "no");
+    printf("  Found:          %s\n",       astar_result.found ? "yes" : "no");
     printf("  Path length:    %d cells\n", astar_result.path_length);
-    printf("  Nodes expanded: %d\n",   astar_result.nodes_expanded);
+    printf("  Nodes expanded: %d\n",       astar_result.nodes_expanded);
     printf("  Path: ");
     print_path_coordinates(&astar_result);
 
-    print_separator();
-    printf("Running Dijkstra (no heuristic, baseline)...\n");
+    printf("\nRunning Dijkstra (no heuristic, baseline)...\n");
     dijkstra_search(&grid, start, goal, &dijkstra_result);
-    printf("  Found:          %s\n",   dijkstra_result.found ? "yes" : "no");
+    printf("  Found:          %s\n",       dijkstra_result.found ? "yes" : "no");
     printf("  Path length:    %d cells\n", dijkstra_result.path_length);
-    printf("  Nodes expanded: %d\n",   dijkstra_result.nodes_expanded);
+    printf("  Nodes expanded: %d\n",       dijkstra_result.nodes_expanded);
 
-    print_separator();
-    printf("Comparison:\n");
-    printf("  A* nodes:       %d\n",   astar_result.nodes_expanded);
-    printf("  Dijkstra nodes: %d\n",   dijkstra_result.nodes_expanded);
+    printf("\nComparison:\n");
+    printf("  A* nodes:         %d\n", astar_result.nodes_expanded);
+    printf("  Dijkstra nodes:   %d\n", dijkstra_result.nodes_expanded);
     if (dijkstra_result.nodes_expanded > 0) {
         double reduction = 100.0 * (dijkstra_result.nodes_expanded - astar_result.nodes_expanded)
                            / dijkstra_result.nodes_expanded;
-        printf("  Reduction:      %.1f%%\n", reduction);
+        printf("  Reduction:        %.1f%%\n", reduction);
     }
     printf("  Same path length: %s\n",
            astar_result.path_length == dijkstra_result.path_length ? "yes" : "no");
@@ -220,9 +233,8 @@ static void run_scenario_basic(void) {
     print_grid(&grid, &astar_result, start, goal, NULL);
 
     if (VERBOSE) {
-        printf("\nVerbose: Robot walking path step by step\n");
-        print_separator();
         int i;
+        printf("\nVerbose: Robot walking path step by step\n\n");
         for (i = 0; i < astar_result.path_length; i++) {
             Point robot = astar_result.path[i];
             printf("Step %2d: Robot at (%d,%d)\n", i, robot.row, robot.col);
@@ -233,7 +245,13 @@ static void run_scenario_basic(void) {
     }
 }
 
-/* ── Scenario 2: Rerouting ────────────────────────────────────────────────── */
+/*
+ * run_scenario_reroute() simulates the robot moving partway along its planned
+ * route when a new obstacle appears directly ahead. A* replans from the
+ * robot's current position and finds an alternative route. This mirrors the
+ * rerouting experiment in Hu et al. [2] where delivery robots encounter
+ * unexpected choke points mid-journey and must dynamically replan.
+ */
 static void run_scenario_reroute(void) {
     Grid grid;
     SearchResult initial_result;
@@ -244,13 +262,12 @@ static void run_scenario_reroute(void) {
     Point new_obstacle;
     int step;
 
-    print_header("Scenario 2: Dynamic Rerouting");
+    printf("\nScenario 2: Dynamic Rerouting\n");
     printf("Grid size: %dx%d\n", GRID_SIZE, GRID_SIZE);
     printf("Inspired by rerouting experiments in Hu et al. [2]\n\n");
 
     load_demo_grid(&grid);
 
-    /* Initial plan */
     printf("Step 1: Planning initial route...\n");
     astar_search(&grid, start, goal, &initial_result);
 
@@ -266,9 +283,7 @@ static void run_scenario_reroute(void) {
     printf("\nInitial map with planned route:\n");
     print_grid(&grid, &initial_result, start, goal, NULL);
 
-    /* Robot moves along path */
-    print_separator();
-    printf("Step 2: Robot begins moving along planned route...\n\n");
+    printf("\nStep 2: Robot begins moving along planned route...\n\n");
 
     if (VERBOSE) {
         for (step = 0; step < 4 && step < initial_result.path_length; step++) {
@@ -285,18 +300,21 @@ static void run_scenario_reroute(void) {
         }
     }
 
-    /* New obstacle appears */
+    /*
+     * Simulate a new obstacle appearing on the planned path.
+     * path[3] is the robot's current position after 3 moves.
+     * path[4] is the next cell, which we block to force a replan.
+     * grid_set_cell() marks it as 1, removing it from the graph.
+     */
     robot_pos    = initial_result.path[3];
     new_obstacle = initial_result.path[4];
     grid_set_cell(&grid, new_obstacle, 1);
 
-    print_separator();
-    printf("Step 3: New obstacle detected!\n");
+    printf("\nStep 3: New obstacle detected!\n");
     printf("  Robot current position: (%d,%d)\n", robot_pos.row, robot_pos.col);
     printf("  Blocked cell:           (%d,%d)\n", new_obstacle.row, new_obstacle.col);
     printf("  Replanning from current position...\n\n");
 
-    /* Replan */
     astar_search(&grid, robot_pos, goal, &reroute_result);
 
     if (!reroute_result.found) {
@@ -313,9 +331,8 @@ static void run_scenario_reroute(void) {
     print_grid(&grid, &reroute_result, robot_pos, goal, &robot_pos);
 
     if (VERBOSE) {
-        printf("\nVerbose: Robot walking new route step by step\n");
-        print_separator();
         int i;
+        printf("\nVerbose: Robot walking new route step by step\n\n");
         for (i = 0; i < reroute_result.path_length; i++) {
             Point rp = reroute_result.path[i];
             printf("Step %2d: Robot at (%d,%d)\n", i, rp.row, rp.col);
@@ -325,15 +342,17 @@ static void run_scenario_reroute(void) {
         printf("Robot reached goal (%d,%d) via new route.\n", goal.row, goal.col);
     }
 
-    print_separator();
-    printf("Summary:\n");
+    printf("\nSummary:\n");
     printf("  Initial plan:  %d nodes expanded\n", initial_result.nodes_expanded);
     printf("  Replan:        %d nodes expanded\n", reroute_result.nodes_expanded);
     printf("  Replan is faster because the robot starts closer to the goal.\n");
     printf("  This confirms A* is suitable for real-time replanning [2].\n");
 }
 
-/* ── Main ─────────────────────────────────────────────────────────────────── */
+/*
+ * main() parses arguments, prints the configuration, and runs the selected
+ * scenario. Returns 0 on success. Exits early if -h is passed.
+ */
 int main(int argc, char** argv) {
     if (check_for_help(argc, argv)) {
         print_help();
@@ -348,7 +367,7 @@ int main(int argc, char** argv) {
            WEIGHT_HIGH, EC_THRESHOLD, WEIGHT_LOW_NUM);
     printf("Verbose mode: %s\n", VERBOSE ? "on" : "off");
     printf("Grid size:    %dx%d\n", GRID_SIZE, GRID_SIZE);
-    printf("Scenario:     %d\n\n", SCENARIO);
+    printf("Scenario:     %d\n", SCENARIO);
 
     if (SCENARIO == 1) {
         run_scenario_basic();
