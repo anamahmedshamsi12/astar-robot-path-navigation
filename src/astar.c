@@ -18,11 +18,11 @@
  *   Mai Jialing et al. [3] confirms that dynamically adjusting the
  *   heuristic weight improves search efficiency in complex environments.
  */
- 
+
 #include "astar.h"
 #include <stdio.h>
 #include <string.h>
- 
+
 /*
  * HeapEntry is one item in the priority queue.
  * A* uses a priority queue so it always processes the cell with
@@ -45,7 +45,7 @@ typedef struct {
     int f_score;
     int h_score;
 } HeapEntry;
- 
+
 /*
  * MinHeap is the binary min-heap used as the priority queue for A*.
  *
@@ -66,7 +66,7 @@ typedef struct {
     HeapEntry data[MAX_CELLS * 4];
     int size;
 } MinHeap;
- 
+
 /*
  * result_reset() clears a SearchResult to its zero/empty state.
  * Called at the start of every search to prevent data from a previous
@@ -84,7 +84,7 @@ static void result_reset(SearchResult* result) {
         result->path[i].col = -1;
     }
 }
- 
+
 /*
  * grid_init() sets up a Grid with the given dimensions and zeros all
  * cells (walkable). Must be called before placing any obstacles.
@@ -99,7 +99,7 @@ void grid_init(Grid* grid, int rows, int cols) {
         grid->cells[i] = 0;
     }
 }
- 
+
 /*
  * grid_in_bounds() checks that Point p is inside the grid.
  * C does not check array bounds automatically — reading outside
@@ -111,7 +111,7 @@ int grid_in_bounds(const Grid* grid, Point p) {
     if (p.col < 0 || p.col >= grid->cols) { return 0; }
     return 1;
 }
- 
+
 /*
  * point_equal() compares two Points field by field.
  * C structs cannot be compared with == directly so we check
@@ -120,7 +120,7 @@ int grid_in_bounds(const Grid* grid, Point p) {
 int point_equal(Point a, Point b) {
     return a.row == b.row && a.col == b.col;
 }
- 
+
 /*
  * point_to_index() converts (row, col) to a flat array index
  * using row-major order: index = row * cols + col.
@@ -131,7 +131,7 @@ int point_equal(Point a, Point b) {
 int point_to_index(const Grid* grid, Point p) {
     return p.row * grid->cols + p.col;
 }
- 
+
 /*
  * index_to_point() reverses point_to_index().
  * Integer division (index / cols) gives the row.
@@ -143,14 +143,14 @@ Point index_to_point(const Grid* grid, int index) {
     p.col = index % grid->cols;
     return p;
 }
- 
+
 /*
  * grid_get_cell() returns the raw cell value (0 or 1) at Point p.
  */
 int grid_get_cell(const Grid* grid, Point p) {
     return grid->cells[point_to_index(grid, p)];
 }
- 
+
 /*
  * grid_is_blocked() returns 1 if the cell is an obstacle.
  * Any non-zero value is treated as blocked so the grid can later
@@ -159,7 +159,7 @@ int grid_get_cell(const Grid* grid, Point p) {
 int grid_is_blocked(const Grid* grid, Point p) {
     return grid_get_cell(grid, p) != 0;
 }
- 
+
 /*
  * grid_set_cell() writes a value to the cell at Point p.
  * Bounds are checked first to prevent writing outside cells[].
@@ -169,7 +169,7 @@ void grid_set_cell(Grid* grid, Point p, int value) {
         grid->cells[point_to_index(grid, p)] = value;
     }
 }
- 
+
 /*
  * manhattan_distance() computes the base heuristic h(n):
  *     h = |a.row - b.row| + |a.col - b.col|
@@ -192,7 +192,7 @@ int manhattan_distance(Point a, Point b) {
     if (col_diff < 0) { col_diff = -col_diff; }
     return row_diff + col_diff;
 }
- 
+
 /*
  * compute_weighted_f() applies the dynamic weight coefficient from
  * Chatzisavvas et al. [1] to compute f = g + k * h.
@@ -224,7 +224,7 @@ static int compute_weighted_f(int g, int h, int ec) {
         return g + (h * WEIGHT_LOW_NUM) / WEIGHT_LOW_DEN;
     }
 }
- 
+
 /*
  * heap_has_higher_priority() defines the ordering rule for the heap.
  * Returns 1 if entry a should be processed before entry b.
@@ -237,7 +237,7 @@ static int heap_has_higher_priority(HeapEntry a, HeapEntry b) {
     if (a.h_score != b.h_score) { return a.h_score < b.h_score; }
     return a.cell_index < b.cell_index;
 }
- 
+
 /*
  * heap_swap() exchanges two HeapEntry values via a temporary variable.
  * Takes pointers to modify the actual array entries rather than copies.
@@ -248,7 +248,7 @@ static void heap_swap(HeapEntry* a, HeapEntry* b) {
     *a = *b;
     *b = temp;
 }
- 
+
 /*
  * heap_init() resets the heap to empty by setting size to 0.
  * No need to clear data[] since size tracks the valid boundary.
@@ -256,7 +256,7 @@ static void heap_swap(HeapEntry* a, HeapEntry* b) {
 static void heap_init(MinHeap* heap) {
     heap->size = 0;
 }
- 
+
 /*
  * heap_is_empty() returns 1 if no entries remain in the heap.
  * The main search loop uses this as its stopping condition: if the
@@ -265,7 +265,7 @@ static void heap_init(MinHeap* heap) {
 static int heap_is_empty(const MinHeap* heap) {
     return heap->size == 0;
 }
- 
+
 /*
  * heap_push() inserts a new entry and restores the heap property
  * using bubble-up.
@@ -281,11 +281,11 @@ static int heap_is_empty(const MinHeap* heap) {
 static void heap_push(MinHeap* heap, HeapEntry entry) {
     int child;
     int parent;
- 
+
     heap->data[heap->size] = entry;
     child = heap->size;
     heap->size++;
- 
+
     while (child > 0) {
         parent = (child - 1) / 2;
         if (heap_has_higher_priority(heap->data[child], heap->data[parent])) {
@@ -296,7 +296,7 @@ static void heap_push(MinHeap* heap, HeapEntry entry) {
         }
     }
 }
- 
+
 /*
  * heap_pop() removes and returns the root (highest-priority entry)
  * and restores the heap property using bubble-down.
@@ -313,15 +313,15 @@ static void heap_push(MinHeap* heap, HeapEntry entry) {
 static HeapEntry heap_pop(MinHeap* heap) {
     HeapEntry top = heap->data[0];
     int parent = 0;
- 
+
     heap->size--;
     heap->data[0] = heap->data[heap->size];
- 
+
     while (1) {
         int left     = (2 * parent) + 1;
         int right    = (2 * parent) + 2;
         int smallest = parent;
- 
+
         if (left < heap->size &&
             heap_has_higher_priority(heap->data[left], heap->data[smallest])) {
             smallest = left;
@@ -331,14 +331,14 @@ static HeapEntry heap_pop(MinHeap* heap) {
             smallest = right;
         }
         if (smallest == parent) { break; }
- 
+
         heap_swap(&heap->data[parent], &heap->data[smallest]);
         parent = smallest;
     }
- 
+
     return top;
 }
- 
+
 /*
  * build_path() reconstructs the start-to-goal path by following
  * parent[] links backward from goal to start, then reversing.
@@ -357,19 +357,19 @@ static void build_path(const Grid* grid, int parent[], int goal_index, SearchRes
     int count = 0;
     int current = goal_index;
     int i;
- 
+
     while (current != -1) {
         reversed[count] = index_to_point(grid, current);
         count++;
         current = parent[current];
     }
- 
+
     result->path_length = count;
     for (i = 0; i < count; i++) {
         result->path[i] = reversed[count - 1 - i];
     }
 }
- 
+
 /*
  * search_internal() is the shared implementation used by both A* and Dijkstra.
  *
@@ -397,16 +397,16 @@ static void build_path(const Grid* grid, int parent[], int goal_index, SearchRes
  */
 static int search_internal(const Grid* grid, Point start, Point goal,
                            int use_heuristic, SearchResult* result) {
- 
+
     int total_cells = grid->rows * grid->cols;
- 
+
     /*
      * g_score[i] = best known actual cost from start to cell i.
      * Initialized to INF_COST so the first real distance always wins.
      * This is the standard shortest-path initialization pattern.
      */
     int g_score[MAX_CELLS];
- 
+
     /*
      * parent[i] = flat index of the cell we came from to reach cell i.
      * Initialized to -1 (no parent). Following these links backward
@@ -414,7 +414,7 @@ static int search_internal(const Grid* grid, Point start, Point goal,
      * predecessor-chain technique used in linked list traversal.
      */
     int parent[MAX_CELLS];
- 
+
     /*
      * closed[i] = 1 if cell i has been fully processed, 0 otherwise.
      * Once a cell is closed its g_score is finalized and it will not
@@ -423,12 +423,12 @@ static int search_internal(const Grid* grid, Point start, Point goal,
      * in BFS and DFS to prevent revisiting finalized nodes.
      */
     int closed[MAX_CELLS];
- 
+
     MinHeap open_set;
     int i;
     int start_index;
     int goal_index;
- 
+
     /*
      * Four movement directions: up, down, left, right.
      * Stored as an array and looped over rather than writing four
@@ -443,24 +443,24 @@ static int search_internal(const Grid* grid, Point start, Point goal,
         { 0, -1},
         { 0,  1}
     };
- 
+
     result_reset(result);
- 
+
     if (!grid_in_bounds(grid, start) || !grid_in_bounds(grid, goal)) { return 0; }
     if (grid_is_blocked(grid, start) || grid_is_blocked(grid, goal)) { return 0; }
- 
+
     start_index = point_to_index(grid, start);
     goal_index  = point_to_index(grid, goal);
- 
+
     for (i = 0; i < total_cells; i++) {
         g_score[i] = INF_COST;
         parent[i]  = -1;
         closed[i]  = 0;
     }
- 
+
     heap_init(&open_set);
     g_score[start_index] = 0;
- 
+
     /*
      * Push start into the heap with its initial f_score.
      * For A*: apply dynamic weight to h(start, goal).
@@ -473,14 +473,14 @@ static int search_internal(const Grid* grid, Point start, Point goal,
     } else {
         heap_push(&open_set, (HeapEntry){start_index, 0, 0});
     }
- 
+
     while (!heap_is_empty(&open_set)) {
- 
+
         HeapEntry current_entry = heap_pop(&open_set);
         int current_index = current_entry.cell_index;
         Point current_point = index_to_point(grid, current_index);
         int d;
- 
+
         /*
          * Skip stale heap entries. Because we use lazy deletion,
          * the same cell may appear multiple times with different f_scores.
@@ -488,7 +488,7 @@ static int search_internal(const Grid* grid, Point start, Point goal,
          * This is the same "already visited" check used in BFS and DFS.
          */
         if (closed[current_index]) { continue; }
- 
+
         /*
          * Mark this cell as fully processed. After this point its
          * g_score is finalized and the loop invariant holds: every
@@ -496,13 +496,13 @@ static int search_internal(const Grid* grid, Point start, Point goal,
          */
         closed[current_index] = 1;
         result->nodes_expanded++;
- 
+
         if (current_index == goal_index) {
             result->found = 1;
             build_path(grid, parent, goal_index, result);
             return 1;
         }
- 
+
         for (d = 0; d < 4; d++) {
             Point neighbor;
             int neighbor_index;
@@ -510,16 +510,16 @@ static int search_internal(const Grid* grid, Point start, Point goal,
             int h_val;
             int ec;
             int f_val;
- 
+
             neighbor.row = current_point.row + directions[d].row;
             neighbor.col = current_point.col + directions[d].col;
- 
+
             if (!grid_in_bounds(grid, neighbor)) { continue; }
             if (grid_is_blocked(grid, neighbor))  { continue; }
- 
+
             neighbor_index = point_to_index(grid, neighbor);
             if (closed[neighbor_index])           { continue; }
- 
+
             /*
              * Relaxation step: if going through the current cell gives
              * a shorter path to this neighbor, update and push.
@@ -528,11 +528,11 @@ static int search_internal(const Grid* grid, Point start, Point goal,
              * only update when we have found a strictly better path.
              */
             tentative_g = g_score[current_index] + 1;
- 
+
             if (tentative_g < g_score[neighbor_index]) {
                 g_score[neighbor_index] = tentative_g;
                 parent[neighbor_index]  = current_index;
- 
+
                 if (use_heuristic) {
                     /*
                      * Compute the weighted f_score using the dynamic weight
@@ -562,15 +562,15 @@ static int search_internal(const Grid* grid, Point start, Point goal,
                     h_val = 0;
                     f_val = tentative_g;
                 }
- 
+
                 heap_push(&open_set, (HeapEntry){neighbor_index, f_val, h_val});
             }
         }
     }
- 
+
     return 0;
 }
- 
+
 /*
  * astar_search() runs A* with the dynamic weight coefficient.
  * Passes use_heuristic=1 so compute_weighted_f() is applied.
@@ -578,7 +578,7 @@ static int search_internal(const Grid* grid, Point start, Point goal,
 int astar_search(const Grid* grid, Point start, Point goal, SearchResult* result) {
     return search_internal(grid, start, goal, 1, result);
 }
- 
+
 /*
  * dijkstra_search() runs Dijkstra with no heuristic (h = 0).
  * Passes use_heuristic=0 so f_score = g_score only.
@@ -587,7 +587,7 @@ int astar_search(const Grid* grid, Point start, Point goal, SearchResult* result
 int dijkstra_search(const Grid* grid, Point start, Point goal, SearchResult* result) {
     return search_internal(grid, start, goal, 0, result);
 }
- 
+
 /*
  * print_result_summary() prints found status, path length, and
  * nodes expanded. The ternary operator prints "yes"/"no" for readability.

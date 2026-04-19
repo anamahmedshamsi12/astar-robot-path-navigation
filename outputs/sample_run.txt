@@ -4,10 +4,7 @@ Verbose mode: on
 Grid size:    8x8
 Scenario:     2
 
-
-============================================================
-  Scenario 1: A* vs Dijkstra Pathfinding
-============================================================
+Scenario 1: A* vs Dijkstra Pathfinding
 Grid size: 8x8
 Dynamic weight: k=3 when EC>18 (far from goal), k=0.85 when EC<=18 (near goal)
 Source: Chatzisavvas et al. [1]
@@ -22,22 +19,21 @@ S . . . . . . .
 . . # . . . . . 
 . . . . . . . G 
 
-------------------------------------------------------------
 Running A* with dynamic weight coefficient...
   Found:          yes
   Path length:    15 cells
   Nodes expanded: 56
   Path:   (0,0) -> (0,1) -> (0,2) -> (0,3) -> (0,4) -> (0,5) -> (0,6) -> (0,7) -> (1,7) -> (2,7) -> (3,7) -> (4,7) -> (5,7) -> (6,7) -> (7,7)
-------------------------------------------------------------
+
 Running Dijkstra (no heuristic, baseline)...
   Found:          yes
   Path length:    15 cells
   Nodes expanded: 56
-------------------------------------------------------------
+
 Comparison:
-  A* nodes:       56
-  Dijkstra nodes: 56
-  Reduction:      0.0%
+  A* nodes:         56
+  Dijkstra nodes:   56
+  Reduction:        0.0%
   Same path length: yes
 
 Grid with A* path (* = path cells):
@@ -51,7 +47,7 @@ S * * * * * * *
 . . . . . . . G 
 
 Verbose: Robot walking path step by step
-------------------------------------------------------------
+
 Step  0: Robot at (0,0)
 R * * * * * * * 
 . . # . . . . * 
@@ -204,9 +200,7 @@ S * * * * * * *
 
 Robot reached goal (7,7).
 
-============================================================
-  Scenario 2: Dynamic Rerouting
-============================================================
+Scenario 2: Dynamic Rerouting
 Grid size: 8x8
 Inspired by rerouting experiments in Hu et al. [2]
 
@@ -223,7 +217,7 @@ S * * * * * * *
 . . . . . # . * 
 . . # . . . . * 
 . . . . . . . G 
-------------------------------------------------------------
+
 Step 2: Robot begins moving along planned route...
 
   Move 1: Robot at (0,0)
@@ -266,7 +260,7 @@ S * * R * * * *
 . . # . . . . * 
 . . . . . . . G 
 
-------------------------------------------------------------
+
 Step 3: New obstacle detected!
   Robot current position: (0,3)
   Blocked cell:           (0,4)
@@ -286,7 +280,7 @@ Grid after rerouting (R=robot, #=obstacle including new one):
 . . . . . . . G 
 
 Verbose: Robot walking new route step by step
-------------------------------------------------------------
+
 Step  0: Robot at (0,3)
 . . . R # . . . 
 . . # * * * * * 
@@ -408,7 +402,7 @@ Step 11: Robot at (7,7)
 . . . . . . . R 
 
 Robot reached goal (7,7) via new route.
-------------------------------------------------------------
+
 Summary:
   Initial plan:  56 nodes expanded
   Replan:        33 nodes expanded

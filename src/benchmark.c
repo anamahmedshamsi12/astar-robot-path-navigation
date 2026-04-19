@@ -74,7 +74,7 @@ int main(void) {
     int r, i;
     int repeats = 2000;
 
-    /* ── EXPERIMENT 1: Grid Size Scaling ─────────────────────────────────── */
+    /* Experiment 1: Grid Size Scaling */
     {
         int sizes[] = {10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60};
         int num_sizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
@@ -112,7 +112,7 @@ int main(void) {
         printf("Saved outputs/benchmark_grid_size.csv\n");
     }
 
-    /* ── EXPERIMENT 2: Obstacle Density Scaling ──────────────────────────── */
+    /* Experiment 2: Obstacle Density Scaling */
     {
         double densities[] = {0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40};
         int num_densities = (int)(sizeof(densities) / sizeof(densities[0]));
@@ -155,7 +155,7 @@ int main(void) {
         printf("Saved outputs/benchmark_obstacle_density.csv\n");
     }
 
-    /* ── EXPERIMENT 3: Initial Planning vs Replanning ────────────────────── */
+    /* Experiment 3: Initial Planning vs Replanning */
     /*
      * Measures how long A* takes for an initial search versus replanning
      * after a new obstacle appears mid-route. Directly corresponds to the
