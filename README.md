@@ -383,13 +383,84 @@ This figure directly connects to the City Finder homework. In that assignment, c
 ### 8.9 Discussion
  
 The empirical results collectively confirm three findings from the literature. Chatzisavvas et al. [1] predict that dynamic weighting reduces search routes without degrading path quality, and the data here shows a 96.4% reduction at 60x60 with no change in path length. Hu et al. [2] predict that A\* with a weighted heuristic explores far fewer nodes than Dijkstra even when both find optimal paths, and the side-by-side grid visualization confirms this both visually and quantitatively. Mai Jialing and Zhang Xiaohua [3] predict that dynamic weight adjustment improves efficiency in complex environments, and the corridor grids and waypoint network both demonstrate focused, efficient exploration consistent with that prediction. Simply put, the three papers agree, and the empirical data produced here supports all three of them.
+
 ## 9. Rerouting Experiment
-
+ 
+One of the practical advantages of A\* for robot navigation is the ability to replan dynamically when the environment changes. Hu et al. [2] study this scenario specifically in the context of outdoor delivery robots encountering unexpected choke points such as traffic congestion or road construction. In order to demonstrate this capability, the demo program `src/main.c` implements a rerouting scenario in which A\* finds an initial path from start to goal, the robot is simulated to have moved three steps along the planned route, a new obstacle is introduced at the next cell on the original path to simulate an unexpected blockage, and A\* is called again from the robot's current position to produce a new path that avoids the blocked cell.
+ 
+In the captured output at `outputs/sample_run.txt`, the rerouted search expanded only 33 nodes, significantly fewer than the initial search of 56 nodes, because the dynamic weight coefficient with $k = 3$ pushed the replanning search aggressively toward the goal from the robot's intermediate position. This demonstrates that A\* is practical for real-time replanning, not just initial path computation, which is consistent with the conclusion of Hu et al. [2] that an improved A\* variant is more suitable than standard algorithms for delivery robots operating in dynamic outdoor environments.
+ 
 ## 10. Testing
-
+ 
+Nine correctness tests are implemented in `src/tests.c`. All nine must pass before the empirical benchmark data can be interpreted as meaningful, since a flawed implementation would produce incorrect node counts and path lengths that appear plausible but are not.
+ 
+| Test | Property Verified |
+|:---|:---|
+| `test_manhattan_distance` | Heuristic computes correct values for known inputs |
+| `test_finds_path_in_open_grid` | Correct 9-cell optimal path on 5x5 open grid |
+| `test_finds_path_around_obstacles` | All path cells are walkable, no cell has value 1 |
+| `test_returns_no_path_when_blocked` | Returns 0 and found=0 for disconnected goal |
+| `test_start_equals_goal` | Returns single-cell path when start equals goal |
+| `test_astar_matches_dijkstra_path_length` | Both algorithms find paths of equal optimal length |
+| `test_astar_expands_fewer_nodes_than_dijkstra` | A\* node count strictly less than Dijkstra |
+| `test_reroute_after_new_obstacle` | Valid alternative path found after mid-route blockage |
+| `test_dynamic_weight_reduces_nodes` | Dynamic weight produces fewer nodes than Dijkstra, 44 vs 384 |
+ 
+The final test was added specifically to validate the core contribution of this implementation. It constructs a 20x20 grid with a vertical obstacle wall, runs both A\* with dynamic weighting and Dijkstra, and asserts that A\* expands strictly fewer nodes. In practice, A\* expanded 44 nodes versus Dijkstra's 384, an 88.5% reduction, directly confirming the prediction of Chatzisavvas et al. [1].
+ 
+To reproduce all tests:
+ 
+```bash
+make test
+```
 ## 11. Limitations
-
+ 
+Several limitations of this implementation should be acknowledged.
+ 
+**Physical simplification.** The occupancy grid treats the robot as a dimensionless point mass with uniform step costs. A physical humanoid robot must account for joint kinematics, center-of-mass stability, step placement constraints, and actuator dynamics. These concerns are outside the scope of discrete path planning and would require integration with motion planning and control systems.
+ 
+**Static known environment.** The grid is assumed to be fully known and static before the search begins. In practice, robots must build their maps incrementally during navigation using Simultaneous Localization and Mapping. Mai Jialing and Zhang Xiaohua [3] identify integration with online map updates as a critical direction for future work in their conclusion, and this limitation applies equally to the current implementation.
+ 
+**Admissibility trade-off with $k = 3$.** As noted in Section 6.2, the high-weight mode is technically inadmissible. While empirical results show no degradation in path quality on the benchmark grids, pathological obstacle layouts could in principle cause A\* to return a suboptimal path. Applications requiring strict optimality guarantees should use $k \leq 1$ throughout.
+ 
+**Fixed-size arrays.** The implementation uses stack-allocated arrays with a maximum grid size of 64x64. This bound is sufficient for the benchmarks and aligns with the assignment scope, but production deployment on larger maps would require dynamic memory allocation.
+ 
+**Four-directional movement.** Restricting movement to cardinal directions limits the precision of paths in continuous environments. Mai Jialing and Zhang Xiaohua [3] address this by extending the search neighborhood to eight directions with directional pruning, which produces smoother paths more suitable for physical robot motion.
+ 
+---
+ 
 ## 12. Conclusion
+ 
+This paper presented an implementation of A\* with a dynamic weight coefficient for robot navigation, grounded in three peer-reviewed papers by Chatzisavvas et al. [1], Hu et al. [2], and Mai Jialing and Zhang Xiaohua [3]. The core modification, setting the heuristic weight $k$ to 3 when far from the goal and 0.85 when near it, reduced nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six benchmark grid sizes and produced a 28x runtime speedup at the largest tested size.
+ 
+The implementation connects to graph theory from Module 10, binary heaps from Module 9, Dijkstra's algorithm from Module 11, and loop invariant correctness proofs from Module 13. The weighted waypoint network extends the City Finder homework model from Module 10, demonstrating that the same graph abstraction used to find routes between cities scales directly to indoor robot navigation. In this sense, A\* is not an isolated topic but a synthesis of nearly everything covered in the second half of the course.
+ 
+A\* with a dynamic weight coefficient represents a practically important balance between the theoretical guarantees of standard A\* and the speed of purely greedy search. As robot navigation systems operate in increasingly large and complex environments, the ability to reduce search effort by orders of magnitude while maintaining near-optimal path quality will remain essential. The results in this paper confirm that even a simple two-value adaptive weight can achieve dramatic efficiency gains, supporting the broader research direction pursued by all three source papers.
+ 
+---
+ 
+## 13. How to Build and Run
+ 
+**Requirements:** `gcc` with C11 support, `make`, Python 3 with `matplotlib`, `numpy`, and `networkx`.
+ 
+```bash
+# Compile all C programs
+make all
+ 
+# Run the navigation demo
+make run > outputs/sample_run.txt
+ 
+# Run all 9 correctness tests
+make test > outputs/test_run.txt
+ 
+# Run the benchmark
+make bench > outputs/benchmark_results.csv
+ 
+# Generate all figures
+python3 generate_figures.py
+python3 network_graph.py
+```
+
 
 
 ## References
