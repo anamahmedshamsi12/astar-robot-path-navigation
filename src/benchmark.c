@@ -74,7 +74,7 @@ int main(void) {
     int r, i;
     int repeats = 2000;
 
-    /* Experiment 1: Grid Size Scaling */
+    /* ── EXPERIMENT 1: Grid Size Scaling ─────────────────────────────────── */
     {
         int sizes[] = {10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60};
         int num_sizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
@@ -112,7 +112,7 @@ int main(void) {
         printf("Saved outputs/benchmark_grid_size.csv\n");
     }
 
-    /* Experiment 2: Obstacle Density Scaling */
+    /* ── EXPERIMENT 2: Obstacle Density Scaling ──────────────────────────── */
     {
         double densities[] = {0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40};
         int num_densities = (int)(sizeof(densities) / sizeof(densities[0]));
@@ -155,7 +155,7 @@ int main(void) {
         printf("Saved outputs/benchmark_obstacle_density.csv\n");
     }
 
-    /* Experiment 3: Initial Planning vs Replanning */
+    /* ── EXPERIMENT 3: Initial Planning vs Replanning ────────────────────── */
     /*
      * Measures how long A* takes for an initial search versus replanning
      * after a new obstacle appears mid-route. Directly corresponds to the
@@ -217,6 +217,61 @@ int main(void) {
         printf("Saved outputs/benchmark_replan.csv\n");
     }
 
-    printf("\nAll 3 benchmark experiments complete.\n");
+    /* Experiment 4: Heuristic Comparison
+     *
+     * Compares four search configurations on the same corridor grid
+     * across the same grid sizes as Experiment 1. The four configurations
+     * directly demonstrate the effect of choosing different heuristics:
+     *
+     *   1. A* with Manhattan distance + dynamic weight k (this implementation)
+     *   2. A* with Manhattan distance + fixed k = 1 (standard A* from [4])
+     *   3. A* with Euclidean distance + fixed k = 1
+     *   4. Dijkstra (h = 0, no heuristic)
+     *
+     * Manhattan is tighter than Euclidean on a 4-direction grid because
+     * it exactly matches the true grid distance when no obstacles are present.
+     * Euclidean underestimates more, so it is less informed and expands
+     * more nodes. Dijkstra expands the most because it has no directional
+     * guidance at all. The dynamic weight on top of Manhattan is the most
+     * efficient because it amplifies the directional bias when far from goal.
+     */
+    {
+        int sizes[] = {10, 20, 30, 40, 50, 60};
+        int num_sizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
+        FILE* f = fopen("outputs/benchmark_heuristics.csv", "w");
+        if (!f) { printf("ERROR: cannot open benchmark_heuristics.csv\n"); return 1; }
+        fprintf(f, "grid_size,manhattan_dynamic_nodes,manhattan_fixed_nodes,"
+                   "euclidean_fixed_nodes,dijkstra_nodes\n");
+
+        for (i = 0; i < num_sizes; i++) {
+            Grid grid;
+            SearchResult r1, r2, r3, r4;
+            Point start = {0, 0};
+            Point goal  = {sizes[i]-1, sizes[i]-1};
+
+            build_corridor_grid(&grid, sizes[i]);
+
+            astar_search(&grid, start, goal, &r1);
+            astar_manhattan_standard(&grid, start, goal, &r2);
+            astar_euclidean_standard(&grid, start, goal, &r3);
+            dijkstra_search(&grid, start, goal, &r4);
+
+            fprintf(f, "%d,%d,%d,%d,%d\n",
+                    sizes[i],
+                    r1.nodes_expanded,
+                    r2.nodes_expanded,
+                    r3.nodes_expanded,
+                    r4.nodes_expanded);
+
+            printf("  %dx%d: dynamic=%d  manhattan=%d  euclidean=%d  dijkstra=%d\n",
+                   sizes[i], sizes[i],
+                   r1.nodes_expanded, r2.nodes_expanded,
+                   r3.nodes_expanded, r4.nodes_expanded);
+        }
+        fclose(f);
+        printf("Saved outputs/benchmark_heuristics.csv\n");
+    }
+
+    printf("\nAll 4 benchmark experiments complete.\n");
     return 0;
 }

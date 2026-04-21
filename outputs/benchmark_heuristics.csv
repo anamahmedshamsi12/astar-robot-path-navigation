@@ -1,0 +1,7 @@
+grid_size,manhattan_dynamic_nodes,manhattan_fixed_nodes,euclidean_fixed_nodes,dijkstra_nodes
+10,88,19,71,88
+20,44,39,331,368
+30,64,59,791,848
+40,84,79,1451,1528
+50,104,99,2311,2408
+60,124,119,3371,3488

@@ -277,3 +277,51 @@ plt.close()
 print("Saved figures/line_replan.png")
 
 print("\nAll line graphs saved to figures/")
+
+
+# EXPERIMENT 4: Heuristic Comparison
+# Reads benchmark_heuristics.csv which compares four search configurations
+# on the same corridor grid to show how heuristic choice affects nodes expanded.
+# The four configurations are:
+#   1. A* with Manhattan distance + dynamic weight k (this implementation)
+#   2. A* with Manhattan distance + fixed k = 1 (standard A*)
+#   3. A* with Euclidean distance + fixed k = 1
+#   4. Dijkstra (h = 0, zero heuristic)
+# A tighter admissible heuristic expands fewer nodes, which is directly
+# visible in the data: Manhattan is tighter than Euclidean on a 4-direction
+# grid so Manhattan A* expands far fewer nodes than Euclidean A*.
+rows4   = read_csv("outputs/benchmark_heuristics.csv")
+sizes4  = [int(r["grid_size"])                   for r in rows4]
+dyn     = [int(r["manhattan_dynamic_nodes"])      for r in rows4]
+man     = [int(r["manhattan_fixed_nodes"])        for r in rows4]
+euc     = [int(r["euclidean_fixed_nodes"])        for r in rows4]
+dijk    = [int(r["dijkstra_nodes"])               for r in rows4]
+hlabels = [f"{s}x{s}" for s in sizes4]
+
+COL_MAN = '#00b0ff'   # cyan for Manhattan standard
+COL_EUC = '#ff1744'   # red for Euclidean
+
+fig, ax = plt.subplots(figsize=(12, 6), facecolor=COL_BG)
+styled_ax(ax)
+ax.plot(hlabels, dyn,  color=COL_A,   marker='o', linewidth=2.5, markersize=7,
+        label='A* Manhattan + dynamic k (this paper)')
+ax.plot(hlabels, man,  color=COL_MAN, marker='s', linewidth=2.5, markersize=7,
+        label='A* Manhattan + fixed k=1 (standard A*)')
+ax.plot(hlabels, euc,  color=COL_EUC, marker='^', linewidth=2.5, markersize=7,
+        label='A* Euclidean + fixed k=1')
+ax.plot(hlabels, dijk, color=COL_D,   marker='D', linewidth=2.5, markersize=7,
+        label="Dijkstra (h=0, no heuristic)")
+ax.set_xlabel('Grid Size', color='white', fontsize=11)
+ax.set_ylabel('Nodes Expanded', color='white', fontsize=11)
+ax.set_title("Experiment 4: Heuristic Comparison -- Nodes Expanded\n"
+             "Tighter admissible heuristics expand fewer nodes",
+             color='white', fontweight='bold')
+ax.legend(facecolor='#1a1a2e', edgecolor='none', labelcolor='white', fontsize=9)
+plt.xticks(rotation=30, color='white')
+plt.tight_layout()
+plt.savefig('figures/line_heuristic_comparison.png', dpi=150,
+            bbox_inches='tight', facecolor=COL_BG)
+plt.close()
+print("Saved figures/line_heuristic_comparison.png")
+
+print("\nAll line graphs saved to figures/")
