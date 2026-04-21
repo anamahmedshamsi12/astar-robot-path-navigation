@@ -3,33 +3,42 @@ Dynamic weight coefficient: A* Search Algorithm -- Test Suite
 Dynamic weight coefficient: k=3 (far), k=0.85 (near), threshold=18
 Verbose mode: on
 
-  Running 9 t
-       (0,0)->(3,4)=7, (2,2)->(2,2)=0  PASS   (3.0 us)
-  [ 2]
-       (0,0)->(3,4)=7, (2,2)->(2,2)=0  PASS   (3.0 us)
-  [ 2] test_finds_path_in_open_grid                  
-       path_length=9, start=(0,0), goal=(4,4)  PASS   (31.0 us)
-  [ 3] test_finds_path_around_obstacles              
-       path_length=9, all 9 cells walkable  PASS   (5.0 us)
-  [ 4] test_returns_no_path_when_blocked             
-       found=0, path_length=0  PASS   (4.0 us)
-  [ 5] test_start_equals_goal                        
-       path_length=1 (expected 1)  PASS   (3.0 us)
-  [ 6] test_astar_matches_dijkstra_path_length       
-       A*=23 cells, Dijkstra=23 cells  PASS   (
-       A*=92 nodes, Dijkstra=126 nodes, reduction=27.0%  PASS
-       A*=92 nodes, Dijkstra=126 nodes, reduction=27.0%  PASS   (
-       blocked=(0,5), new_path_length=21  PASS   (22.0 us)
-  
-       blocked=(0,5), new_path_length=21  PASS   (22.0 us)
-  [ 9] test_dynamic_weight_reduces_nodes             
-       A*=44 nodes, Dijkstra=384 nodes, reduction=88.5%  PASS   (42.0 us)
+  Running 13 tests...
 
-  Results: 9 run, 9 passed, 0 failed
+  [ 1] test_manhattan_distance                       
+       (0,0)->(3,4)=7, (2,2)->(2,2)=0  PASS   
+       path_length=9, start=(0,0), goal=(4,4)  PASS   (24.0 u
+       path_length=9, start=(0,0), goal=(4,4)  PASS   (24.0 us)
+  [ 3] test_finds_path_around_obstacles              
+       path_length=9, all 9 cells walkable  PASS   (3.0 us)
+  [ 4] test_returns_no_path_when_blocked             
+       found=0, path_length=0  PASS   (2.0 us)
+  [ 5] test_start_equals_goal                        
+       path_length=1 (expected 1)  PASS   (2.0 us)
+  [ 6] test_astar_matches_dijkstra_path_length       
+       A*=23 cells, Dijkstra=23 cells  PASS   (29.0 us)
+  [ 7] test_astar_expands_fewer_nodes                
+       A*=92 nodes, Dijkstra=126 nodes, reduction=27.0%  PASS   (19.0 us)
+  [ 8] test_reroute_after_new_obstacle               
+       blocked=(0,5), new_path_length=21  PASS   (
+       A*=44 nodes, Dijkstra=384 nodes, reduction=88.5%  PASS
+       A*=44 nodes, Dijkstra=384 nodes, reduction=88.5%  PASS   (
+       path_length=23, start=(0,0), goal=(11,11)  PASS   (5.0
+       path_length=23, start=(0,0), goal=(11,11)  PASS   
+       path_length=23, start=(0,0), goal=(11,11)  PASS   (19.
+       path_length=23, start=(0,0), goal=(11,11)  PASS   (
+       dynamic=23  manhattan=23  euclidean=23  dijkstra=23  P
+       dynamic=23  manhattan=23  euclidean=23  dijkstra=23  PASS   (
+       manhattan=39 nodes, euclidean=347 nodes  PASS   (64.0 
+       manhattan=39 nodes, euclidean=347 nodes  PASS   (64.0 us)
+
+  Results: 13 run, 13 passed, 0 failed
   All tests passed.
 
-  Timing summary (avg 3.08 us/run
-  Dijkstra (no heuristic):       avg 11.51 us/run
-  Speedup: 3.7x faster
-(no heuristic):       avg 11.51 us/run
-  Speedup: 3.7x faster
+  Timing summary (20x20avg 3.54 us/run
+  A* Manhattan + fixed k=1:           avg 2.72 us/run
+  A* Euclidean + fixed k=1:           avg 24.37 us/run
+  Dijkstra (no heuristic):            avg 11.11 us/run
+  Speedup (dynamic vs Dijkstra): 3.1x faster
+avg 11.11 us/run
+  Speedup (dynamic vs Dijkstra): 3.1x faster

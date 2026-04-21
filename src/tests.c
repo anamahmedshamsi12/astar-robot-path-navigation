@@ -48,20 +48,24 @@ static double elapsed_us(clock_t start, clock_t end) {
  */
 static void print_help(void) {
     printf("Usage: ./tests_runner [OPTIONS]\n\n");
-    printf("Runs all 9 correctness and timing tests for the A* implementation.\n\n");
+    printf("Runs all 13 correctness and timing tests for the A* implementation.\n\n");
     printf("Options:\n");
     printf("  -h, --help     Print this help message\n");
     printf("  -v, --verbose  Show extra detail for each test\n\n");
     printf("Tests:\n");
-    printf("  1. test_manhattan_distance\n");
-    printf("  2. test_finds_path_in_open_grid\n");
-    printf("  3. test_finds_path_around_obstacles\n");
-    printf("  4. test_returns_no_path_when_blocked\n");
-    printf("  5. test_start_equals_goal\n");
-    printf("  6. test_astar_matches_dijkstra_path_length\n");
-    printf("  7. test_astar_expands_fewer_nodes_than_dijkstra\n");
-    printf("  8. test_reroute_after_new_obstacle\n");
-    printf("  9. test_dynamic_weight_reduces_nodes\n\n");
+    printf("  1.  test_manhattan_distance\n");
+    printf("  2.  test_finds_path_in_open_grid\n");
+    printf("  3.  test_finds_path_around_obstacles\n");
+    printf("  4.  test_returns_no_path_when_blocked\n");
+    printf("  5.  test_start_equals_goal\n");
+    printf("  6.  test_astar_matches_dijkstra_path_length\n");
+    printf("  7.  test_astar_expands_fewer_nodes_than_dijkstra\n");
+    printf("  8.  test_reroute_after_new_obstacle\n");
+    printf("  9.  test_dynamic_weight_reduces_nodes\n");
+    printf("  10. test_manhattan_standard_finds_correct_path\n");
+    printf("  11. test_euclidean_standard_finds_correct_path\n");
+    printf("  12. test_all_heuristics_same_path_length\n");
+    printf("  13. test_manhattan_expands_fewer_than_euclidean\n\n");
 }
 
 /*
@@ -321,10 +325,105 @@ static void test_dynamic_weight_reduces_nodes(int* passed) {
 }
 
 /*
+ * test_manhattan_standard_finds_correct_path() verifies that standard A*
+ * with Manhattan distance and fixed k=1 finds a path of the correct length
+ * on the compare grid. This tests the astar_manhattan_standard() function
+ * added for the heuristic comparison experiment.
+ */
+static void test_manhattan_standard_finds_correct_path(int* passed) {
+    Grid grid;
+    SearchResult result;
+    build_compare_grid(&grid);
+    if (!astar_manhattan_standard(&grid, (Point){0,0}, (Point){11,11}, &result)) {
+        *passed=0; return;
+    }
+    if (!result.found || result.path_length == 0) { *passed=0; return; }
+    if (!point_equal(result.path[0], (Point){0,0})) { *passed=0; return; }
+    if (!point_equal(result.path[result.path_length-1], (Point){11,11})) {
+        *passed=0; return;
+    }
+    if (VERBOSE)
+        printf("\n       path_length=%d, start=(0,0), goal=(11,11)  ",
+               result.path_length);
+}
+
+/*
+ * test_euclidean_standard_finds_correct_path() verifies that A* with
+ * Euclidean distance and fixed k=1 finds a path of the correct length.
+ * Euclidean is admissible on any grid so it must find the optimal path,
+ * even though it expands more nodes than Manhattan on a 4-direction grid.
+ */
+static void test_euclidean_standard_finds_correct_path(int* passed) {
+    Grid grid;
+    SearchResult result;
+    build_compare_grid(&grid);
+    if (!astar_euclidean_standard(&grid, (Point){0,0}, (Point){11,11}, &result)) {
+        *passed=0; return;
+    }
+    if (!result.found || result.path_length == 0) { *passed=0; return; }
+    if (!point_equal(result.path[0], (Point){0,0})) { *passed=0; return; }
+    if (!point_equal(result.path[result.path_length-1], (Point){11,11})) {
+        *passed=0; return;
+    }
+    if (VERBOSE)
+        printf("\n       path_length=%d, start=(0,0), goal=(11,11)  ",
+               result.path_length);
+}
+
+/*
+ * test_all_heuristics_same_path_length() verifies the admissibility property:
+ * all four search configurations must find paths of exactly equal length on
+ * the same grid because all three non-zero heuristics are admissible and
+ * the grid has unit step costs. If any configuration returns a different
+ * path length, it means either the heuristic is inadmissible or there is
+ * a bug in that search function. This is the most important correctness
+ * test for the heuristic comparison experiment.
+ */
+static void test_all_heuristics_same_path_length(int* passed) {
+    Grid grid;
+    SearchResult r_dyn, r_man, r_euc, r_dijk;
+    build_compare_grid(&grid);
+    astar_search(&grid, (Point){0,0}, (Point){11,11}, &r_dyn);
+    astar_manhattan_standard(&grid, (Point){0,0}, (Point){11,11}, &r_man);
+    astar_euclidean_standard(&grid, (Point){0,0}, (Point){11,11}, &r_euc);
+    dijkstra_search(&grid, (Point){0,0}, (Point){11,11}, &r_dijk);
+    if (r_dyn.path_length != r_man.path_length)  { *passed=0; return; }
+    if (r_dyn.path_length != r_euc.path_length)  { *passed=0; return; }
+    if (r_dyn.path_length != r_dijk.path_length) { *passed=0; return; }
+    if (VERBOSE)
+        printf("\n       dynamic=%d  manhattan=%d  euclidean=%d  dijkstra=%d  ",
+               r_dyn.path_length, r_man.path_length,
+               r_euc.path_length, r_dijk.path_length);
+}
+
+/*
+ * test_manhattan_expands_fewer_than_euclidean() verifies the theoretical
+ * prediction that Manhattan distance is a tighter heuristic than Euclidean
+ * on a 4-direction grid and therefore expands fewer nodes. This confirms
+ * the empirical findings of Gudari and Vadivu [7] and Yin et al. [6] with
+ * a programmatic assertion rather than just visual inspection of charts.
+ */
+static void test_manhattan_expands_fewer_than_euclidean(int* passed) {
+    Grid grid;
+    SearchResult r_man, r_euc;
+    int row;
+    grid_init(&grid, 20, 20);
+    for (row = 1; row < 18; row++)
+        if (row != 15) grid_set_cell(&grid, (Point){row, 10}, 1);
+    astar_manhattan_standard(&grid, (Point){0,0}, (Point){19,19}, &r_man);
+    astar_euclidean_standard(&grid, (Point){0,0}, (Point){19,19}, &r_euc);
+    if (r_man.nodes_expanded >= r_euc.nodes_expanded) { *passed=0; return; }
+    if (VERBOSE)
+        printf("\n       manhattan=%d nodes, euclidean=%d nodes  ",
+               r_man.nodes_expanded, r_euc.nodes_expanded);
+}
+
+/*
  * run_timing_summary() runs each search 5000 times and prints average
  * microseconds per run plus the speedup ratio. This is the same timing
  * approach used in the speed comparison assignment: many repetitions to
  * get stable measurements for fast-running functions.
+ * Now includes all four search configurations for a complete comparison.
  */
 static void run_timing_summary(void) {
     int repeats = 5000;
@@ -333,7 +432,8 @@ static void run_timing_summary(void) {
     SearchResult result;
     Point start = {0, 0};
     Point goal  = {19, 19};
-    clock_t a_begin, a_end, d_begin, d_end;
+    clock_t t_begin, t_end;
+    double dyn_us, man_us, euc_us, dijk_us;
     int row;
 
     grid_init(&grid, 20, 20);
@@ -341,22 +441,42 @@ static void run_timing_summary(void) {
         if (row != 15) grid_set_cell(&grid, (Point){row, 10}, 1);
 
     printf("\n  Timing summary (20x20 grid, %d runs each):\n", repeats);
-    printf("  %-30s ", "A* with dynamic weight:");
+
+    printf("  %-35s ", "A* Manhattan + dynamic k:");
     fflush(stdout);
-    a_begin = clock();
+    t_begin = clock();
     for (r = 0; r < repeats; r++) astar_search(&grid, start, goal, &result);
-    a_end = clock();
-    printf("avg %.2f us/run\n", elapsed_us(a_begin, a_end) / repeats);
+    t_end = clock();
+    dyn_us = elapsed_us(t_begin, t_end) / repeats;
+    printf("avg %.2f us/run\n", dyn_us);
 
-    printf("  %-30s ", "Dijkstra (no heuristic):");
+    printf("  %-35s ", "A* Manhattan + fixed k=1:");
     fflush(stdout);
-    d_begin = clock();
-    for (r = 0; r < repeats; r++) dijkstra_search(&grid, start, goal, &result);
-    d_end = clock();
-    printf("avg %.2f us/run\n", elapsed_us(d_begin, d_end) / repeats);
+    t_begin = clock();
+    for (r = 0; r < repeats; r++) astar_manhattan_standard(&grid, start, goal, &result);
+    t_end = clock();
+    man_us = elapsed_us(t_begin, t_end) / repeats;
+    printf("avg %.2f us/run\n", man_us);
 
-    printf("  Speedup: %.1fx faster\n",
-           elapsed_us(d_begin, d_end) / elapsed_us(a_begin, a_end));
+    printf("  %-35s ", "A* Euclidean + fixed k=1:");
+    fflush(stdout);
+    t_begin = clock();
+    for (r = 0; r < repeats; r++) astar_euclidean_standard(&grid, start, goal, &result);
+    t_end = clock();
+    euc_us = elapsed_us(t_begin, t_end) / repeats;
+    printf("avg %.2f us/run\n", euc_us);
+
+    printf("  %-35s ", "Dijkstra (no heuristic):");
+    fflush(stdout);
+    t_begin = clock();
+    for (r = 0; r < repeats; r++) dijkstra_search(&grid, start, goal, &result);
+    t_end = clock();
+    dijk_us = elapsed_us(t_begin, t_end) / repeats;
+    printf("avg %.2f us/run\n", dijk_us);
+
+    if (dyn_us > 0)
+        printf("  Speedup (dynamic vs Dijkstra): %.1fx faster\n",
+               dijk_us / dyn_us);
 }
 
 /*
@@ -376,9 +496,9 @@ static void process_args(int argc, char** argv) {
 }
 
 /*
- * main() runs all 9 tests in sequence, prints a results summary,
- * and finishes with a timing comparison. Returns 1 if any test
- * failed so the shell can detect failures in scripts.
+ * main() runs all 13 tests in sequence, prints a results summary,
+ * and finishes with a timing comparison across all four configurations.
+ * Returns 1 if any test failed so the shell can detect failures in scripts.
  */
 int main(int argc, char** argv) {
     process_args(argc, argv);
@@ -387,17 +507,21 @@ int main(int argc, char** argv) {
     printf("Dynamic weight coefficient: k=%d (far), k=0.%d (near), threshold=%d\n",
            WEIGHT_HIGH, WEIGHT_LOW_NUM, EC_THRESHOLD);
     printf("Verbose mode: %s\n\n", VERBOSE ? "on" : "off");
-    printf("  Running 9 tests...\n\n");
+    printf("  Running 13 tests...\n\n");
 
-    RUN_TEST(test_manhattan_distance,                 test_manhattan_distance);
-    RUN_TEST(test_finds_path_in_open_grid,            test_finds_path_in_open_grid);
-    RUN_TEST(test_finds_path_around_obstacles,        test_finds_path_around_obstacles);
-    RUN_TEST(test_returns_no_path_when_blocked,       test_returns_no_path_when_blocked);
-    RUN_TEST(test_start_equals_goal,                  test_start_equals_goal);
-    RUN_TEST(test_astar_matches_dijkstra_path_length, test_astar_matches_dijkstra_path_length);
-    RUN_TEST(test_astar_expands_fewer_nodes,          test_astar_expands_fewer_nodes_than_dijkstra);
-    RUN_TEST(test_reroute_after_new_obstacle,         test_reroute_after_new_obstacle);
-    RUN_TEST(test_dynamic_weight_reduces_nodes,       test_dynamic_weight_reduces_nodes);
+    RUN_TEST(test_manhattan_distance,                    test_manhattan_distance);
+    RUN_TEST(test_finds_path_in_open_grid,               test_finds_path_in_open_grid);
+    RUN_TEST(test_finds_path_around_obstacles,           test_finds_path_around_obstacles);
+    RUN_TEST(test_returns_no_path_when_blocked,          test_returns_no_path_when_blocked);
+    RUN_TEST(test_start_equals_goal,                     test_start_equals_goal);
+    RUN_TEST(test_astar_matches_dijkstra_path_length,    test_astar_matches_dijkstra_path_length);
+    RUN_TEST(test_astar_expands_fewer_nodes,             test_astar_expands_fewer_nodes_than_dijkstra);
+    RUN_TEST(test_reroute_after_new_obstacle,            test_reroute_after_new_obstacle);
+    RUN_TEST(test_dynamic_weight_reduces_nodes,          test_dynamic_weight_reduces_nodes);
+    RUN_TEST(test_manhattan_standard_finds_correct_path, test_manhattan_standard_finds_correct_path);
+    RUN_TEST(test_euclidean_standard_finds_correct_path, test_euclidean_standard_finds_correct_path);
+    RUN_TEST(test_all_heuristics_same_path_length,       test_all_heuristics_same_path_length);
+    RUN_TEST(test_manhattan_expands_fewer_than_euclidean,test_manhattan_expands_fewer_than_euclidean);
 
     printf("\n  Results: %d run, %d passed, %d failed\n",
            tests_run, tests_pass, tests_fail);
