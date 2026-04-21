@@ -194,6 +194,45 @@ int manhattan_distance(Point a, Point b) {
 }
 
 /*
+ * euclidean_distance_int() computes an integer approximation of the
+ * Euclidean (straight-line) distance between two grid cells:
+ *
+ *     h = (int) sqrt( (a.row - b.row)^2 + (a.col - b.col)^2 )
+ *
+ * The result is the floor of the true Euclidean distance. Integer
+ * truncation means h may underestimate slightly, which preserves
+ * admissibility: h(n) <= true cost to goal for all n.
+ *
+ * Euclidean distance is always <= Manhattan distance on a grid:
+ *   Manhattan: h = dr + dc
+ *   Euclidean: h = sqrt(dr^2 + dc^2) <= dr + dc (by triangle inequality)
+ *
+ * This means Euclidean is admissible but less informed than Manhattan
+ * on a 4-direction grid. A less tight heuristic causes A* to expand
+ * more nodes, since the priority estimates are less accurate.
+ *
+ * For example, from (0,0) to (3,4):
+ *   Manhattan h = 3 + 4 = 7
+ *   Euclidean h = sqrt(9+16) = sqrt(25) = 5
+ * The true shortest path (no obstacles) = 7 steps.
+ * Manhattan h=7 is exactly right. Euclidean h=5 underestimates by 2.
+ */
+int euclidean_distance_int(Point a, Point b) {
+    int dr = a.row - b.row;
+    int dc = a.col - b.col;
+    int sq = dr * dr + dc * dc;
+    /* Integer square root via Newton's method. */
+    /* Start with an upper bound estimate. */
+    int x = sq;
+    int y = 1;
+    while (x > y) {
+        x = (x + y) / 2;
+        y = sq / x;
+    }
+    return x;
+}
+
+/*
  * compute_weighted_f() applies the dynamic weight coefficient from
  * Chatzisavvas et al. [1] to compute f = g + k * h.
  *
@@ -586,6 +625,170 @@ int astar_search(const Grid* grid, Point start, Point goal, SearchResult* result
  */
 int dijkstra_search(const Grid* grid, Point start, Point goal, SearchResult* result) {
     return search_internal(grid, start, goal, 0, result);
+}
+
+/*
+ * astar_manhattan_standard() runs standard A* with Manhattan heuristic
+ * and a fixed weight of k = 1. This is the original A* from Hart et al.
+ * [4] with no dynamic weight modification.
+ *
+ * Evaluation function: f(n) = g(n) + 1 * h(n)
+ *
+ * The inner loop reuses search_internal with use_heuristic=1 but we need
+ * the fixed k=1 behavior. We implement this as a direct search loop here
+ * so the comparison is transparent and does not require modifying the
+ * existing search_internal interface.
+ */
+int astar_manhattan_standard(const Grid* grid, Point start, Point goal,
+                              SearchResult* result) {
+    int g_score[MAX_CELLS];
+    int parent[MAX_CELLS];
+    int closed[MAX_CELLS];
+    MinHeap open_set;
+    int total_cells = grid->rows * grid->cols;
+    int i, start_index, goal_index;
+    Point directions[4] = {{-1,0},{1,0},{0,-1},{0,1}};
+
+    result_reset(result);
+    if (!grid_in_bounds(grid, start) || !grid_in_bounds(grid, goal)) return 0;
+    if (grid_is_blocked(grid, start) || grid_is_blocked(grid, goal)) return 0;
+
+    start_index = point_to_index(grid, start);
+    goal_index  = point_to_index(grid, goal);
+
+    for (i = 0; i < total_cells; i++) {
+        g_score[i] = INF_COST;
+        parent[i]  = -1;
+        closed[i]  = 0;
+    }
+
+    heap_init(&open_set);
+    g_score[start_index] = 0;
+
+    /* Standard A*: f = g + h where h is Manhattan distance, k fixed at 1 */
+    {
+        int h_start = manhattan_distance(start, goal);
+        heap_push(&open_set, (HeapEntry){start_index, h_start, h_start});
+    }
+
+    while (!heap_is_empty(&open_set)) {
+        HeapEntry cur = heap_pop(&open_set);
+        int ci = cur.cell_index;
+        Point cp = index_to_point(grid, ci);
+        int d;
+
+        if (closed[ci]) continue;
+        closed[ci] = 1;
+        result->nodes_expanded++;
+
+        if (ci == goal_index) {
+            result->found = 1;
+            build_path(grid, parent, goal_index, result);
+            return 1;
+        }
+
+        for (d = 0; d < 4; d++) {
+            Point nb;
+            int ni, tg, h_val, f_val;
+            nb.row = cp.row + directions[d].row;
+            nb.col = cp.col + directions[d].col;
+            if (!grid_in_bounds(grid, nb)) continue;
+            if (grid_is_blocked(grid, nb))  continue;
+            ni = point_to_index(grid, nb);
+            if (closed[ni]) continue;
+            tg = g_score[ci] + 1;
+            if (tg < g_score[ni]) {
+                g_score[ni] = tg;
+                parent[ni]  = ci;
+                h_val = manhattan_distance(nb, goal);
+                f_val = tg + h_val;   /* standard A*: k = 1 always */
+                heap_push(&open_set, (HeapEntry){ni, f_val, h_val});
+            }
+        }
+    }
+    return 0;
+}
+
+/*
+ * astar_euclidean_standard() runs standard A* with Euclidean distance
+ * heuristic and a fixed weight of k = 1.
+ *
+ * Evaluation function: f(n) = g(n) + 1 * h(n)
+ * where h(n) = euclidean_distance_int(n, goal)
+ *
+ * Euclidean distance is admissible but less informed than Manhattan on
+ * a 4-direction grid (see euclidean_distance_int comments above), so
+ * this variant typically expands more nodes than Manhattan A* while
+ * still expanding fewer nodes than Dijkstra.
+ */
+int astar_euclidean_standard(const Grid* grid, Point start, Point goal,
+                              SearchResult* result) {
+    int g_score[MAX_CELLS];
+    int parent[MAX_CELLS];
+    int closed[MAX_CELLS];
+    MinHeap open_set;
+    int total_cells = grid->rows * grid->cols;
+    int i, start_index, goal_index;
+    Point directions[4] = {{-1,0},{1,0},{0,-1},{0,1}};
+
+    result_reset(result);
+    if (!grid_in_bounds(grid, start) || !grid_in_bounds(grid, goal)) return 0;
+    if (grid_is_blocked(grid, start) || grid_is_blocked(grid, goal)) return 0;
+
+    start_index = point_to_index(grid, start);
+    goal_index  = point_to_index(grid, goal);
+
+    for (i = 0; i < total_cells; i++) {
+        g_score[i] = INF_COST;
+        parent[i]  = -1;
+        closed[i]  = 0;
+    }
+
+    heap_init(&open_set);
+    g_score[start_index] = 0;
+
+    /* Standard A*: f = g + h where h is Euclidean distance, k fixed at 1 */
+    {
+        int h_start = euclidean_distance_int(start, goal);
+        heap_push(&open_set, (HeapEntry){start_index, h_start, h_start});
+    }
+
+    while (!heap_is_empty(&open_set)) {
+        HeapEntry cur = heap_pop(&open_set);
+        int ci = cur.cell_index;
+        Point cp = index_to_point(grid, ci);
+        int d;
+
+        if (closed[ci]) continue;
+        closed[ci] = 1;
+        result->nodes_expanded++;
+
+        if (ci == goal_index) {
+            result->found = 1;
+            build_path(grid, parent, goal_index, result);
+            return 1;
+        }
+
+        for (d = 0; d < 4; d++) {
+            Point nb;
+            int ni, tg, h_val, f_val;
+            nb.row = cp.row + directions[d].row;
+            nb.col = cp.col + directions[d].col;
+            if (!grid_in_bounds(grid, nb)) continue;
+            if (grid_is_blocked(grid, nb))  continue;
+            ni = point_to_index(grid, nb);
+            if (closed[ni]) continue;
+            tg = g_score[ci] + 1;
+            if (tg < g_score[ni]) {
+                g_score[ni] = tg;
+                parent[ni]  = ci;
+                h_val = euclidean_distance_int(nb, goal);
+                f_val = tg + h_val;   /* standard A*: k = 1 always */
+                heap_push(&open_set, (HeapEntry){ni, f_val, h_val});
+            }
+        }
+    }
+    return 0;
 }
 
 /*

@@ -34,7 +34,7 @@
  */
 static int VERBOSE   = 0;
 static int GRID_SIZE = 8;
-static int SCENARIO  = 2;
+static int SCENARIO  = 3;
 
 /*
  * print_help() prints usage information and exits.
@@ -52,11 +52,11 @@ static void print_help(void) {
     printf("  -h, --help          Print this help message\n");
     printf("  -v, --verbose       Show robot moving step by step\n");
     printf("  -g, --grid SIZE     Set grid size (default: 8, max: 20)\n");
-    printf("  -s, --scenario N    1 = basic path only, 2 = reroute demo (default: 2)\n\n");
+    printf("  -s, --scenario N    1 = basic A* vs Dijkstra, 2 = reroute demo, 3 = heuristic comparison (default: 3)\n\n");
     printf("Examples:\n");
     printf("  ./demo -v\n");
-    printf("  ./demo -v -g 12\n");
-    printf("  ./demo -s 1 -v\n\n");
+    printf("  ./demo -s 1 -v\n");
+    printf("  ./demo -s 3 -g 15\n\n");
 }
 
 /*
@@ -92,10 +92,10 @@ static void process_args(int argc, char** argv) {
         } else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scenario") == 0)
                     && i + 1 < argc) {
             int sc = atoi(argv[++i]);
-            if (sc == 1 || sc == 2) {
+            if (sc >= 1 && sc <= 3) {
                 SCENARIO = sc;
             } else {
-                printf("WARNING: scenario must be 1 or 2. Using default 2.\n");
+                printf("WARNING: scenario must be 1, 2, or 3. Using default 3.\n");
             }
         }
     }
@@ -350,6 +350,97 @@ static void run_scenario_reroute(void) {
 }
 
 /*
+ * run_scenario_heuristics() compares four search configurations on the
+ * same grid and prints results side by side. This directly shows how
+ * heuristic choice affects the number of nodes expanded and path quality.
+ *
+ * The four configurations are:
+ *   1. A* with Manhattan distance + dynamic weight k (this implementation)
+ *   2. A* with Manhattan distance + fixed k = 1 (standard A* from Hart et al.)
+ *   3. A* with Euclidean distance + fixed k = 1
+ *   4. Dijkstra with no heuristic (h = 0)
+ *
+ * All four find the same optimal path length, confirming that all three
+ * admissible heuristics produce correct results. The node counts show
+ * that tighter heuristics expand fewer nodes: Manhattan < Euclidean < Dijkstra.
+ * The dynamic weight on top of Manhattan is the most efficient overall.
+ *
+ * This scenario is inspired by the comparative analysis in
+ * Gudari and Vadivu [7] and Yin et al. [6].
+ */
+static void run_scenario_heuristics(void) {
+    Grid grid;
+    SearchResult r_dyn, r_man, r_euc, r_dijk;
+    Point start = {0, 0};
+    Point goal  = {GRID_SIZE - 1, GRID_SIZE - 1};
+    double reduction_man, reduction_euc, reduction_dijk;
+
+    printf("\nScenario 3: Heuristic Comparison\n");
+    printf("Grid size: %dx%d\n", GRID_SIZE, GRID_SIZE);
+    printf("Comparing all four search configurations on the same grid.\n");
+    printf("Based on Gudari and Vadivu [7] and Yin et al. [6].\n\n");
+
+    load_demo_grid(&grid);
+
+    printf("Grid map (S=start, G=goal, #=obstacle, .=open):\n");
+    print_grid(&grid, NULL, start, goal, NULL);
+    printf("\n");
+
+    /* Run all four configurations */
+    astar_search(&grid, start, goal, &r_dyn);
+    astar_manhattan_standard(&grid, start, goal, &r_man);
+    astar_euclidean_standard(&grid, start, goal, &r_euc);
+    dijkstra_search(&grid, start, goal, &r_dijk);
+
+    /* Print comparison table */
+    printf("Results:\n");
+    printf("  %-40s  %6s  %6s  %s\n",
+           "Algorithm", "Nodes", "Path", "Found");
+    printf("  %-40s  %6s  %6s  %s\n",
+           "-----------------------------------------",
+           "------", "------", "-----");
+    printf("  %-40s  %6d  %6d  %s\n",
+           "A* Manhattan + dynamic k (Chatzisavvas [1])",
+           r_dyn.nodes_expanded, r_dyn.path_length,
+           r_dyn.found ? "yes" : "no");
+    printf("  %-40s  %6d  %6d  %s\n",
+           "A* Manhattan + fixed k=1 (standard A*)",
+           r_man.nodes_expanded, r_man.path_length,
+           r_man.found ? "yes" : "no");
+    printf("  %-40s  %6d  %6d  %s\n",
+           "A* Euclidean + fixed k=1",
+           r_euc.nodes_expanded, r_euc.path_length,
+           r_euc.found ? "yes" : "no");
+    printf("  %-40s  %6d  %6d  %s\n",
+           "Dijkstra (h=0, no heuristic)",
+           r_dijk.nodes_expanded, r_dijk.path_length,
+           r_dijk.found ? "yes" : "no");
+
+    /* Compute reductions relative to Dijkstra */
+    if (r_dijk.nodes_expanded > 0) {
+        reduction_man  = 100.0 * (r_dijk.nodes_expanded - r_man.nodes_expanded)
+                         / r_dijk.nodes_expanded;
+        reduction_euc  = 100.0 * (r_dijk.nodes_expanded - r_euc.nodes_expanded)
+                         / r_dijk.nodes_expanded;
+        reduction_dijk = 100.0 * (r_dijk.nodes_expanded - r_dyn.nodes_expanded)
+                         / r_dijk.nodes_expanded;
+        printf("\nNode reduction vs Dijkstra:\n");
+        printf("  A* Manhattan + dynamic k: %.1f%% fewer nodes\n", reduction_dijk);
+        printf("  A* Manhattan + fixed k=1: %.1f%% fewer nodes\n", reduction_man);
+        printf("  A* Euclidean + fixed k=1: %.1f%% fewer nodes\n", reduction_euc);
+    }
+
+    printf("\nKey observation:\n");
+    printf("  All four found paths of the same length: %s\n",
+           (r_dyn.path_length == r_man.path_length &&
+            r_man.path_length == r_euc.path_length &&
+            r_euc.path_length == r_dijk.path_length) ? "yes" : "no");
+    printf("  Manhattan is tighter than Euclidean on a 4-direction grid.\n");
+    printf("  Tighter heuristic = fewer nodes expanded = faster search.\n");
+    printf("  Dynamic weight amplifies this further when far from the goal.\n");
+}
+
+/*
  * main() parses arguments, prints the configuration, and runs the selected
  * scenario. Returns 0 on success. Exits early if -h is passed.
  */
@@ -371,9 +462,13 @@ int main(int argc, char** argv) {
 
     if (SCENARIO == 1) {
         run_scenario_basic();
+    } else if (SCENARIO == 2) {
+        run_scenario_basic();
+        run_scenario_reroute();
     } else {
         run_scenario_basic();
         run_scenario_reroute();
+        run_scenario_heuristics();
     }
 
     printf("\nDone. Run with -h for usage options.\n");

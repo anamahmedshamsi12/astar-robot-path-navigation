@@ -160,6 +160,25 @@ Point index_to_point(const Grid* grid, int index);
 int   manhattan_distance(Point a, Point b);
 
 /*
+ * Computes an integer approximation of the Euclidean distance heuristic:
+ *     h = (int) sqrt( (a.row - b.row)^2 + (a.col - b.col)^2 )
+ *
+ * Euclidean distance is admissible on any grid because the straight-line
+ * distance between two points is always less than or equal to the true
+ * shortest path. However it is a weaker (less informed) heuristic than
+ * Manhattan on a 4-direction grid because the grid forces the path to
+ * take more steps than the straight-line distance suggests.
+ *
+ * For example, on a 4-direction grid the path from (0,0) to (3,4) has
+ * Manhattan h = 7, Euclidean h = 5. Both are admissible but Manhattan
+ * provides a tighter lower bound and therefore expands fewer nodes.
+ *
+ * Integer truncation via (int) means h may slightly underestimate,
+ * which preserves admissibility.
+ */
+int   euclidean_distance_int(Point a, Point b);
+
+/*
  * Runs A* with the dynamic weight coefficient from [1].
  * Evaluation function: f(n) = g(n) + k * h(n)
  * where k = WEIGHT_HIGH when EC > EC_THRESHOLD,
@@ -168,6 +187,25 @@ int   manhattan_distance(Point a, Point b);
  * Returns 1 if a path was found, 0 if the goal is unreachable.
  */
 int astar_search(const Grid* grid, Point start, Point goal, SearchResult* result);
+
+/*
+ * Runs standard A* with Manhattan distance heuristic and fixed weight k=1.
+ * Evaluation function: f(n) = g(n) + h(n) where h = manhattan_distance.
+ * This is the original A* algorithm from Hart, Nilsson, Raphael (1968).
+ * Used as a comparison baseline to show the benefit of the dynamic weight
+ * over standard A* with a fixed weight.
+ */
+int astar_manhattan_standard(const Grid* grid, Point start, Point goal, SearchResult* result);
+
+/*
+ * Runs A* with Euclidean distance heuristic and fixed weight k=1.
+ * Evaluation function: f(n) = g(n) + h(n) where h = euclidean_distance_int.
+ * Euclidean distance is admissible but less informed than Manhattan on a
+ * 4-direction grid, so this variant typically expands more nodes than
+ * Manhattan A* while still expanding fewer than Dijkstra.
+ * Used in the heuristic comparison experiment (Experiment 4).
+ */
+int astar_euclidean_standard(const Grid* grid, Point start, Point goal, SearchResult* result);
 
 /*
  * Runs Dijkstra's algorithm with h = 0 (no heuristic, no weight).
