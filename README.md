@@ -259,17 +259,6 @@ This is the contribution of Chatzisavvas et al. [1]. The effective heuristic is 
 | 50 x 50 | 104 | 99 | 2,311 | 2,408 |
 | 60 x 60 | 124 | 119 | 3,371 | 3,488 |
 
-**Empirical comparison across all four heuristics:**
-
-| Grid Size | A\* Dynamic $k$ | A\* Manhattan $k$=1 | A\* Euclidean $k$=1 | Dijkstra ($h$=0) |
-|:---|---:|---:|---:|---:|
-| 10 x 10 | 88 | 19 | 71 | 88 |
-| 20 x 20 | 44 | 39 | 331 | 368 |
-| 30 x 30 | 64 | 59 | 791 | 848 |
-| 40 x 40 | 84 | 79 | 1,451 | 1,528 |
-| 50 x 50 | 104 | 99 | 2,311 | 2,408 |
-| 60 x 60 | 124 | 119 | 3,371 | 3,488 |
-
 The ordering confirms the theoretical predictions exactly. Manhattan expands the fewest nodes because it provides the tightest admissible lower bound on a 4-direction grid. Euclidean performs nearly as poorly as Dijkstra because its underestimation of the true grid cost is large enough to force wide exploration before finding the goal. These results are consistent with the independent findings of two separate studies. Yin et al. [6] tested the same three heuristics on a 30x30 medical laboratory grid and found Manhattan produced 67 search nodes, Euclidean produced 435, and Chebyshev produced 447. Gudari and Vadivu [7] conducted a broader study across grid and graph environments with varying obstacle densities and found Manhattan consistently expanded the fewest nodes across all configurations, with Euclidean and Chebyshev showing comparable but worse performance, at 10% obstacle density on a grid, Manhattan expanded 303 nodes versus Euclidean's 524 and Chebyshev's 629. All three data sets, this implementation, Yin et al. [6], and Gudari and Vadivu [7], show the same ordering: Manhattan is most efficient, Euclidean and Chebyshev are comparable but significantly worse, and Dijkstra is worst of all.
 
 **Note on Chebyshev distance:** Both Yin et al. [6] and Gudari and Vadivu [7] also test Chebyshev distance, defined as $h(n) = \max(|r_n - r_g|, |c_n - c_g|)$. Chebyshev is the correct heuristic for 8-direction movement where diagonal steps cost 1, because a single diagonal step can close both row and column distance simultaneously. On an 8-direction grid, Chebyshev would be a tight admissible heuristic. However, on the 4-direction grid used in this implementation, Chebyshev underestimates even more than Euclidean in most cases. For example, from $(0,0)$ to $(3,4)$, Chebyshev gives $h = \max(3,4) = 4$ versus Manhattan's $h = 7$. The true shortest path is 7 steps. Chebyshev underestimates by 3, which is worse than Euclidean's underestimate of 2. The data from both Yin et al. [6] and Gudari and Vadivu [7] confirms this: Chebyshev consistently expanded more nodes than Euclidean in grid environments. This is why this implementation uses Manhattan distance as the base heuristic, consistent with Chatzisavvas et al. [1] and Hu et al. [2], and consistent with the conclusions of both independent comparison studies.
