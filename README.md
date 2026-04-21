@@ -8,19 +8,19 @@ Khoury College of Computer Sciences, Northeastern University
 
 ## Abstract
 
-This paper presents an implementation of the A\* Search Algorithm with a dynamic weight coefficient applied to robot navigation on a 2D occupancy grid and a weighted waypoint network. The dynamic weight, introduced by Chatzisavvas, Dossis, and Dasygenis [1], modifies the standard evaluation function from $f(n) = g(n) + h(n)$ to $f(n) = g(n) + k \cdot h(n)$, where $k$ adapts based on the estimated remaining distance to the goal. Empirical results demonstrate that this modification reduces nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six grid sizes ranging from 10x10 to 60x60. The implementation is written in C using a from-scratch binary min-heap priority queue and is validated by thirteen correctness tests including four heuristic comparison tests that confirm the admissibility and relative efficiency of Manhattan, Euclidean, and the dynamic weight coefficient. Visualizations on both a grid environment and a building waypoint network confirm the theoretical efficiency claims made in the source literature.
+This paper presents an implementation of the A\* Search Algorithm with a dynamic weight coefficient applied to robot navigation on a 2D occupancy grid and a weighted waypoint network. The dynamic weight, introduced by Chatzisavvas, Dossis, and Dasygenis [1], modifies the standard evaluation function from $f(n) = g(n) + h(n)$ to $f(n) = g(n) + k \cdot h(n)$, where $k$ adapts based on the estimated remaining distance to the goal. Empirical results demonstrate that this modification reduces nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six grid sizes ranging from 10x10 to 60x60. The implementation is written in C using a from-scratch binary min-heap priority queue and is validated by thirteen correctness tests, including four specifically designed to confirm heuristic admissibility and the relative efficiency of Manhattan versus Euclidean distance. Visualizations on both a grid environment and a building waypoint network confirm the theoretical efficiency claims made in the source literature.
 
 ---
 
 ## 1. Introduction
 
-Path planning is one of the most fundamental challenges in autonomous robot navigation. A robot placed in an environment must determine a collision-free route from its current position to a goal location while minimizing traversal cost. The A\* Search Algorithm, originally proposed by Hart, Nilsson, and Raphael [4] in 1968, has remained the dominant approach to this problem for over five decades. Its success stems from a simple but powerful idea: combine the actual cost from the start to the current node with a heuristic estimate of the remaining cost to the goal, and always expand the node that minimizes this combined value. This makes A\* both complete and optimal under admissible heuristics, and far more efficient in practice than uninformed methods such as Dijkstra's algorithm or breadth-first search.
+What makes one pathfinding algorithm better than another, and how can we design one that is both theoretically sound and practically efficient for robot navigation? These are the central questions this paper seeks to answer. The A\* Search Algorithm, originally proposed by Hart, Nilsson, and Raphael [4] in 1968, has become the dominant approach to robot path planning for over five decades. Its core idea is straightforward: combine the actual cost of reaching the current node with a heuristic estimate of the remaining cost to the goal, and always expand the most promising node first. This approach makes A\* both complete and optimal under admissible heuristics, and far more efficient in practice than uninformed methods such as Dijkstra's algorithm.
 
-The performance of A\* depends critically on the choice of heuristic function. A heuristic that estimates the remaining cost accurately allows the algorithm to focus its search toward the goal and ignore irrelevant regions of the grid. A heuristic that underestimates too aggressively, such as Euclidean distance on a 4-direction grid, causes the search to explore cells it does not need to. A heuristic of zero degenerates the algorithm to Dijkstra's, which explores outward in all directions with no directional guidance. Gudari and Vadivu [7] demonstrate empirically that Manhattan distance is the most efficient heuristic on grid-based environments, consistently expanding fewer nodes than both Euclidean and Chebyshev distance across a wide range of grid sizes and obstacle densities. Yin et al. [6] confirm this independently in a medical laboratory robot study, where Manhattan distance expanded 67 nodes compared to 435 for Euclidean and 447 for Chebyshev on the same 30x30 grid.
+One of the most important and often undervalued aspects of A\* is the choice of heuristic function. A heuristic that estimates the remaining cost accurately allows the algorithm to focus its search toward the goal and ignore large portions of the grid entirely. A heuristic that underestimates too aggressively, such as Euclidean distance on a 4-direction grid, causes the search to spread unnecessarily before converging on the goal. A heuristic of zero reduces the algorithm to Dijkstra's, which explores outward in all directions with no guidance. Research by Gudari and Vadivu [7] and Yin et al. [6] has shown empirically that Manhattan distance is the most efficient heuristic for grid-based environments, with Yin et al. [6] reporting that it expanded just 67 nodes compared to 435 for Euclidean and 447 for Chebyshev on the same 30x30 grid. This is significant because it means the choice of heuristic alone can reduce search effort by an order of magnitude.
 
-Despite its widespread adoption, standard A\* with a fixed heuristic weight still exhibits known inefficiencies in large-scale environments. Chatzisavvas et al. [1] demonstrate that A\* tends to generate excessive search routes when the heuristic weight is fixed, particularly in environments with irregular obstacle layouts. Hu, Ba, Cao, Lin, and Wang [2] observe similar behavior in outdoor delivery robot scenarios, noting that the standard algorithm examines far more nodes than necessary when the robot is far from the goal. Mai Jialing and Zhang Xiaohua [3] further identify that the traditional A\* generates redundant nodes and non-smooth paths in complex indoor environments.
+Despite its widespread use, standard A\* with a fixed heuristic weight still has known inefficiencies in large environments. Chatzisavvas et al. [1] demonstrate that the fixed weight causes excessive search routes in complex obstacle layouts. Hu et al. [2] observe similar problems in outdoor delivery robot scenarios, and Mai Jialing and Zhang Xiaohua [3] identify redundant nodes and non-smooth paths in indoor navigation environments. In each case, the researchers found that the standard fixed weight was not optimal across different conditions, and that dynamically adapting it could significantly improve performance.
 
-This project addresses these limitations by implementing the dynamic weight coefficient proposed by Chatzisavvas et al. [1], in which the heuristic weight $k$ is set to 3 when the estimated remaining cost exceeds a threshold of 18, and to 0.85 otherwise. Combined with Manhattan distance as the base heuristic — the most effective choice for 4-direction grids as confirmed by [6] and [7] — this approach makes the search aggressive when the robot is far from the goal and cautious when approaching it. The remainder of this paper describes the algorithm, its theoretical analysis, empirical evaluation across four experiments, and a direct comparison of heuristic choices that confirms the theoretical predictions with measured data.
+This paper presents an implementation of A\* with the dynamic weight coefficient proposed by Chatzisavvas et al. [1], in which the weight $k$ is set to 3 when the robot is far from the goal and 0.85 when it is close. Combined with Manhattan distance as the base heuristic, this approach achieved up to a 96.4% reduction in nodes expanded compared to Dijkstra's algorithm across the benchmark grid sizes. The remainder of this paper provides the background of the algorithm, a detailed theoretical analysis including Big O derivation and loop invariant proof, empirical results from four experiments, a comparison of heuristic choices with formal admissibility proofs, and a discussion of what the results mean for the broader field of robot navigation research.
 
 ---
 
@@ -28,17 +28,17 @@ This project addresses these limitations by implementing the dynamic weight coef
 
 ### 2.1 History of A\*
 
-A\* was first described by Hart, Nilsson, and Raphael [4] in 1968 as an extension of Dijkstra's shortest path algorithm. Dijkstra's algorithm finds the shortest path from a source node to all other nodes in a weighted graph by always expanding the node with the lowest known cost from the source. It is complete and optimal but inefficient for single-target queries because it explores in all directions equally. Hart et al. [4] recognized that if a heuristic estimate of the remaining cost to the goal were available, it could be used to bias the expansion order toward the goal, dramatically reducing the number of nodes processed without sacrificing correctness.
+To understand why A\* is so widely used today, it helps to understand where it came from and what problem it was designed to solve. A\* was first described by Hart, Nilsson, and Raphael [4] in 1968 as an extension of Dijkstra's shortest path algorithm. Dijkstra's algorithm finds the shortest path in a weighted graph by always expanding the node with the lowest known cost from the source. While it is complete and optimal, it is inefficient for single-target queries because it explores in all directions equally, processing many nodes that are nowhere near the goal. Hart et al. [4] recognized that if a heuristic estimate of the remaining cost to the goal were available, it could be used to guide the search directionally, dramatically reducing the number of nodes processed without sacrificing correctness.
 
 The key insight of A\* is its evaluation function:
 
 $$f(n) = g(n) + h(n)$$
 
-where $g(n)$ is the actual cost from the start to node $n$ and $h(n)$ is the heuristic estimate of the cost from $n$ to the goal. Hart et al. [4] proved that A\* is complete and finds the optimal path whenever $h(n)$ is admissible, meaning it never overestimates the true cost. They also proved that among all algorithms using the same heuristic, A\* expands the fewest nodes possible — it is optimally efficient. These two properties, optimality and optimal efficiency, made A\* the standard pathfinding algorithm in robotics, video games, GPS navigation, and artificial intelligence for the following five decades.
+where $g(n)$ is the actual cost from the start to node $n$ and $h(n)$ is the heuristic estimate of the remaining cost from $n$ to the goal. Hart et al. [4] proved that A\* is complete and finds the optimal path whenever $h(n)$ is admissible, meaning it never overestimates the true cost. They also proved that A\* expands the fewest nodes possible among all algorithms using the same heuristic — that is, it is optimally efficient. These two properties, correctness and efficiency, are what made A\* the standard pathfinding algorithm in robotics, video games, GPS navigation, and artificial intelligence research for the decades that followed.
 
 ### 2.2 The Role of the Heuristic Function
 
-The heuristic $h(n)$ is the most consequential design choice in any A\* implementation. Three heuristics are commonly used in grid-based robot navigation, each making different assumptions about the movement model.
+What exactly is a heuristic, and why does the choice of heuristic matter so much? A heuristic is simply an estimate of the cost from the current node to the goal. The better this estimate, the fewer irrelevant nodes A\* will explore. Three heuristics are commonly used in grid-based robot navigation, each making different assumptions about how the agent is allowed to move.
 
 **Manhattan distance** computes $h(n) = |r_n - r_g| + |c_n - c_g|$, the sum of horizontal and vertical differences between the current node and the goal. It is named after the grid layout of Manhattan streets, where one can only travel along the axes. On a 4-direction grid with unit step costs, Manhattan distance is an exact heuristic when no obstacles are present, making it the tightest possible admissible estimate. Gudari and Vadivu [7] and Yin et al. [6] both identify Manhattan distance as the most efficient heuristic for grid environments, with Yin et al. [6] reporting that it expanded 67 nodes versus 435 for Euclidean and 447 for Chebyshev on a 30x30 test grid.
 
@@ -60,13 +60,13 @@ The reasoning behind this design is straightforward. When the robot is far from 
 
 Hu et al. [2] independently arrive at a similar conclusion in their study of outdoor delivery robots, proposing $f(n) = g(n) + a \cdot h(n)$ with $a > 1$ to reduce round-trip searching caused by the standard fixed weight. Their experiments demonstrate that the improved algorithm reduces average delivery time by 11.2% compared to standard A\*. Mai Jialing and Zhang Xiaohua [3] extend this line of work by dynamically adjusting the weight coefficient based on both obstacle density and distance to the goal, reporting approximately 50% improvement in overall planning efficiency. Their work confirms that no single fixed weight is optimal across all environments and that adaptive weighting is a robust strategy for improving A\* in complex robot navigation scenarios.
 
-### 2.4 Connection to Course Material
+### 2.4 Connection to Fundamental Computer Science Concepts
 
-A graph is a collection of nodes connected by edges, and algorithms like BFS and Dijkstra can traverse these structures to find paths. A classic application is finding shortest routes between cities, where cities are nodes and roads are weighted edges. The waypoint network in this project is structurally that same problem applied to robot navigation inside a building. In this sense, the graph representation is not new, only the context and the algorithm operating on it.
+To fully appreciate the design of this implementation, it helps to connect A\* back to foundational computer science concepts that inform every aspect of its behavior. A graph is a collection of nodes connected by edges, and algorithms like BFS and Dijkstra can traverse these structures to find paths. A classic example is finding the shortest route between cities, where cities are nodes and roads are weighted edges. The building waypoint network in this project is structurally the same problem applied to robot navigation inside a building — the same graph abstraction, the same edge weights, just a different context.
 
-The binary min-heap priority queue is essential to A\*'s efficiency. Without a priority queue, the algorithm would have to scan all known nodes to find the one with the lowest $f$-score at each step, producing $O(V^2)$ behavior. With a binary heap, each extraction costs only $O(\log V)$, bringing the total complexity down to $O(V \log V)$. In doing so, the heap makes A\* practical on grids large enough to be meaningful for robot navigation.
+The binary min-heap priority queue is essential to A\*'s efficiency. Without a priority queue, the algorithm would have to scan all known nodes at each step to find the one with the lowest $f$-score, which would produce $O(V^2)$ behavior. With a binary heap, each extraction costs only $O(\log V)$, bringing the total complexity down to $O(V \log V)$. This is significant because it is what makes A\* practical on grids large enough to be useful for real robot navigation, as opposed to just a theoretical exercise.
 
-The relationship to Dijkstra's algorithm is particularly important because it clarifies exactly what the heuristic contributes. Dijkstra sets $h(n) = 0$ and explores outward uniformly. A\* adds $h(n)$ and explores directionally. The dynamic weight from Chatzisavvas et al. [1] amplifies that directionality when the robot is far from the goal, which is where the greatest efficiency gains are possible. Finally, the correctness argument in Section 7 uses a loop invariant to prove that every node in the closed set has its optimal $g$-score finalized, following the standard initialization, maintenance, and termination structure used in formal algorithm analysis.
+The relationship to Dijkstra's algorithm is also particularly important because it clarifies exactly what the heuristic contributes. Dijkstra sets $h(n) = 0$ and explores outward uniformly. A\* adds $h(n)$ and explores directionally. The dynamic weight from Chatzisavvas et al. [1] amplifies that directionality when the robot is far from the goal, which is where the greatest efficiency gains are possible. Additionally, the correctness argument in Section 7 uses a loop invariant to prove that every node in the closed set has its optimal $g$-score finalized — a formal proof structure that demonstrates the algorithm is not just fast in practice, but provably correct.
 
 ---
 
@@ -170,7 +170,41 @@ A_STAR_DYNAMIC_WEIGHT(grid, start, goal)
 
 Dijkstra's algorithm is obtained by setting $k = 0$ throughout, which reduces the priority function to $f(n) = g(n)$ and eliminates all directional guidance toward the goal.
 
-### 4.7 Heuristic Comparison and Admissibility Proofs
+### 4.4 Flowchart: A\* Search Loop
+
+The following flowchart illustrates the complete A\* search loop with the dynamic weight coefficient from Chatzisavvas et al. [1]. It mirrors Algorithm 1 in the source paper and shows every decision point in the implementation.
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Initialize g_score, parent, closed arrays\nSet g_score of start = 0]
+    B --> C[Compute h = manhattan distance start to goal\nApply dynamic weight k\nPush start into min-heap open_set]
+    C --> D{Is open_set empty?}
+    D -- Yes --> E([Return NO PATH FOUND])
+    D -- No --> F[Pop node with lowest f-score\ncall it current]
+    F --> G{Is current\nalready closed?}
+    G -- Yes --> D
+    G -- No --> H[Add current to closed set\nIncrement nodes_expanded]
+    H --> I{Is current\nthe goal?}
+    I -- Yes --> J[Follow parent links\nfrom goal to start\nReverse array]
+    J --> K([Return optimal path])
+    I -- No --> L[For each neighbor: up, down, left, right]
+    L --> M{Is neighbor\nin bounds and\nnot blocked?}
+    M -- No --> L
+    M -- Yes --> N{Is neighbor\nalready closed?}
+    N -- Yes --> L
+    N -- No --> O[tentative_g = g_score of current + 1]
+    O --> P{tentative_g less than\ng_score of neighbor?}
+    P -- No --> L
+    P -- Yes --> Q[Update g_score and parent of neighbor\nCompute h = manhattan neighbor to goal\nCompute EC = h]
+    Q --> R{EC greater than 18?}
+    R -- Yes --> S[Set k = 3\nf = tentative_g + 3 times h]
+    R -- No --> T[Set k = 0.85\nf = tentative_g + 0.85 times h]
+    S --> U[Push neighbor into open_set with f]
+    T --> U
+    U --> L
+```
+
+### 4.5 Heuristic Comparison and Admissibility Proofs
 
 A critical question in A* is which heuristic to use. This implementation uses Manhattan distance with a dynamic weight, but three other configurations are compared empirically in Experiment 4. Understanding why Manhattan is the right choice requires both mathematical proof and empirical evidence.
 
@@ -209,7 +243,7 @@ Since $n'$ is adjacent to $n$, either $r_{n'} = r_n \pm 1$ or $c_{n'} = c_n \pm 
 
 $$|r_n - r_g| \leq |r_n - r_{n'}| + |r_{n'} - r_g| = 1 + |r_{n'} - r_g|$$
 
-Summing both coordinates confirms $h_m(n) \leq 1 + h_m(n')$, which is exactly the consistency condition. A consistent heuristic guarantees that once a node is closed its $g$-score is optimal, which is the key property used in the loop invariant proof in Section 7.
+Summing both coordinates confirms $h_m(n) \leq 1 + h_m(n')$, which is exactly the consistency condition. A consistent heuristic guarantees that once a node is closed its $g$-score is optimal, which is the key property used in the loop invariant proof in Section 10.
 
 **Heuristic 4: Manhattan distance with dynamic weight $k$ (this implementation)**
 
@@ -277,7 +311,7 @@ flowchart TD
     U --> L
 ```
 
-### 4.5 Flowchart: Dynamic Weight Coefficient Decision
+### 4.6 Flowchart: Dynamic Weight Coefficient Decision
 
 This diagram isolates the dynamic weight decision that distinguishes this implementation from standard A\*. The threshold of 18 and the weight values of 3 and 0.85 are taken directly from Algorithm 1 in Chatzisavvas et al. [1].
 
@@ -292,7 +326,7 @@ flowchart LR
     F --> G
 ```
 
-### 4.6 System Architecture
+### 4.7 System Architecture
 
 This diagram shows how all components of the repository connect to each other. The C files form the core implementation and the Python scripts handle visualization only.
 
@@ -303,7 +337,7 @@ flowchart TD
         A[astar.c\ndynamic weight,\nheap, search]
         M[main.c\nCLI demo\nrerouting]
         T[tests.c\n13 correctness tests]
-        B[benchmark.c\n3 experiments]
+        B[benchmark.c\n4 experiments]
     end
 
     subgraph Python Visualization
@@ -318,6 +352,7 @@ flowchart TD
         CSV1[benchmark_grid_size.csv]
         CSV2[benchmark_obstacle_density.csv]
         CSV3[benchmark_replan.csv]
+        CSV4[benchmark_heuristics.csv]
     end
 
     subgraph Figures
@@ -339,6 +374,7 @@ flowchart TD
     B --> CSV1
     B --> CSV2
     B --> CSV3
+    B --> CSV4
     CSV1 --> LG
     CSV2 --> LG
     CSV3 --> LG
@@ -349,6 +385,10 @@ flowchart TD
 ```
 
 
+
+---
+
+## 5. Implementation
 
 ### 5.1 Language and Design Philosophy
 
@@ -486,7 +526,7 @@ int euclidean_distance_int(Point a, Point b) {
 }
 ```
 
-### 5.6 Challenges Faced
+### 5.7 Challenges Faced
 
 Several challenges arose during implementation that are worth documenting.
 
@@ -494,7 +534,7 @@ The first was representing the dynamic weight coefficient in integer arithmetic.
 
 The second challenge was lazy deletion in the heap. A\* naturally produces multiple heap entries for the same cell as better paths are discovered. Updating existing heap entries in place would require a decrease-key operation, which is complex to implement correctly in a fixed-size array heap. Instead, the implementation uses lazy deletion: when a better path to a cell is found, a new entry is simply pushed with the improved score, and stale entries are detected and skipped when they are popped by checking the closed set. This required sizing the heap at `MAX_CELLS * 4` to handle the worst case of multiple entries per cell without overflow.
 
-The third challenge was testing the dynamic weight specifically. Standard A\* tests do not distinguish between the weighted and unweighted versions of the heuristic because both find optimal paths on the test grids. Test 9 `test_dynamic_weight_reduces_nodes` was specifically designed to validate that the weight is actually being applied by checking that nodes expanded is significantly lower than Dijkstra on a 20x20 grid with a vertical wall. Without this test, a silent bug that disabled the weighting would have passed all other tests undetected.
+The third challenge was testing the dynamic weight specifically. Standard A\* tests do not distinguish between the weighted and unweighted versions of the heuristic because both find optimal paths on the test grids. The ninth test `test_dynamic_weight_reduces_nodes` was specifically designed to validate that the weight is actually being applied by checking that nodes expanded is significantly lower than Dijkstra on a 20x20 grid with a vertical wall. Without this test, a silent bug that disabled the weighting would have passed all other tests undetected.
 
 The approach taken to understand the algorithm before writing the C implementation was to study Python implementations of A\* such as the one described by GeeksforGeeks [5] and the explanation in the Awe Robotics robotics path planning article. After understanding the algorithm structure through those resources, the C implementation was written from scratch in a style consistent with the course conventions, without copying any code directly.
 
@@ -536,21 +576,25 @@ final-paper-anamahmedshamsi12-1/
 
 ### 6.1 Robot Navigation
 
-The most direct application of A\* is autonomous robot navigation, which is the context studied by all three source papers. Chatzisavvas et al. [1] apply A\* to unmanned ground vehicles navigating agricultural fields, where the robot must plan efficient routes between crop rows while avoiding obstacles such as irrigation equipment and uneven terrain. Hu et al. [2] apply an improved A\* to outdoor delivery robots that must navigate city environments where unexpected blockages such as parked vehicles or construction zones can appear mid-journey. Mai Jialing and Zhang Xiaohua [3] apply an improved A\* to indoor service robots navigating office and hospital environments where the robot must find efficient routes between rooms. In all three cases, A\* is chosen because it is fast enough for real-time use, produces optimal or near-optimal paths, and handles the discrete grid representation that is standard in robot navigation systems.
+The most direct application of A\* is autonomous robot navigation, which is the context studied by all three source papers used in this project. Chatzisavvas et al. [1] apply A\* to unmanned ground vehicles navigating agricultural fields, where the robot must plan efficient routes between crop rows while avoiding obstacles such as irrigation equipment and uneven terrain. This is significant because agricultural robots must operate across large areas where search efficiency directly translates into battery life and operational cost. Hu et al. [2] apply an improved A\* to outdoor delivery robots navigating city environments, where unexpected blockages such as parked vehicles or construction zones can appear mid-journey and require the robot to replan in real time. Similarly, Mai Jialing and Zhang Xiaohua [3] apply an improved A\* to indoor service robots in office and hospital environments, where narrow corridors and frequent obstacles make efficient pathfinding critical for timely task completion. In all three cases, A\* is selected because it is fast enough for real-time use, produces optimal or near-optimal paths, and handles the discrete grid representation that is standard across robot navigation systems.
 
 ### 6.2 Video Games and Simulations
 
-A\* is also one of the most widely used algorithms in video game development. Non-player characters in strategy games, role-playing games, and simulations use A\* to navigate terrain, avoid walls, and find the shortest route to a target. The algorithm is particularly well-suited to this domain because game environments are naturally represented as tile-based grids, Manhattan distance is an effective heuristic for 4-direction movement, and the algorithm can be interrupted and resumed to spread computation across multiple game frames. The efficiency advantage of the heuristic over Dijkstra is especially important in games where hundreds of characters may need simultaneous path updates.
+Beyond robotics, A\* is one of the most widely used algorithms in video game development. Non-player characters in strategy games, role-playing games, and simulations rely on A\* to navigate terrain, avoid walls, and find the shortest route to a target in real time. This works well because game environments are naturally represented as tile-based grids where Manhattan distance is an effective heuristic, and the algorithm can be paused and resumed to spread computation across multiple game frames without blocking the player experience. The efficiency advantage over Dijkstra is especially important in games where hundreds of characters may need simultaneous path updates — in those scenarios, even a small reduction in nodes expanded per search can mean the difference between a smooth game and a frame rate drop.
 
 ### 6.3 GPS and Map Navigation
 
-Route-finding applications such as GPS navigation systems use variants of A\* to find shortest driving routes in road networks. In this context the graph is not a grid but a network of intersections and roads with varying weights representing distance or estimated travel time. The Euclidean distance to the destination serves as the heuristic, and the algorithm explores routes that progress geographically toward the destination rather than expanding uniformly outward. Google Maps, Apple Maps, and similar systems use A\* variants combined with preprocessing techniques to handle continent-scale road networks in milliseconds.
+Route-finding applications such as GPS navigation systems also rely on variants of A\* to find shortest driving routes in road networks. In this context the environment is not a grid but a weighted graph where nodes represent intersections and edges represent roads with varying travel times. The Euclidean distance to the destination serves as the heuristic, allowing the algorithm to focus on roads that move geographically toward the goal rather than exploring in all directions. Additionally, systems like Google Maps and Apple Maps use A\* variants combined with preprocessing techniques to handle continent-scale networks in milliseconds — a scale where the efficiency gains from a good heuristic are not just useful but absolutely necessary.
 
 ### 6.4 Why A\* Is the Standard Choice
 
-The reason A\* appears in all of these domains comes down to the practical tradeoff it makes. Dijkstra's algorithm guarantees an optimal path but explores the entire reachable area, which is too slow for large environments. Greedy best-first search is fast but produces non-optimal paths. A\* achieves both by combining actual cost $g(n)$ with heuristic estimate $h(n)$, guaranteeing optimality when the heuristic is admissible while focusing exploration toward the goal. The dynamic weight coefficient from Chatzisavvas et al. [1] takes this one step further by making the balance between cost and heuristic adaptive, which is what makes A\* practical for real-time robot navigation in large environments.
+The reason A\* appears across all of these very different domains comes down to the balance it strikes. Dijkstra's algorithm guarantees an optimal path but is too slow for large environments because it explores everything. Greedy best-first search is fast but sacrifices optimality. A\* achieves both by combining actual cost $g(n)$ with heuristic estimate $h(n)$, guaranteeing optimality when the heuristic is admissible while directing the search efficiently toward the goal. The dynamic weight coefficient from Chatzisavvas et al. [1] takes this one step further by making that balance adaptive — more aggressive when the robot is far from the goal and more conservative near it. This is what makes A\* not just theoretically sound but genuinely practical for real-time robot navigation in complex, large-scale environments.
 
-### 6.1 Loop Invariant
+---
+
+## 7. Correctness
+
+### 7.1 Loop Invariant
 
 **Invariant.** At the start of every iteration of the main search loop, every node in the closed set has its optimal $g$-score finalized. That is, for every node $u$ in the closed set, $g[u]$ equals the true shortest-path distance from the start to $u$.
 
@@ -560,15 +604,15 @@ The reason A\* appears in all of these domains comes down to the practical trade
 
 **Termination.** When the goal node is closed, the invariant guarantees that $g[\text{goal}]$ equals the true shortest-path distance. Following parent links from the goal to the start reconstructs this optimal path.
 
-### 6.2 Admissibility Note
+### 7.2 Admissibility Note
 
 When $k = 3$, the effective heuristic is $3 \cdot h(n)$, which may overestimate the true remaining cost and technically violates admissibility. Chatzisavvas et al. [1] explicitly accept this trade-off: the higher weight is applied only when the robot is far from the goal and the terrain is open, conditions under which the heuristic is highly directional and overestimation is unlikely to cause path suboptimality in practice. When $k = 0.85 < 1$, the heuristic is actually more conservative than standard A\*, preserving strong optimality guarantees for the final approach. This adaptive strategy is consistent with the analysis in Mai Jialing and Zhang Xiaohua [3], who observe that increasing the heuristic weight early in the search and decreasing it near the goal effectively balances convergence speed with path accuracy.
 
 ---
 
-## 7. Theoretical Analysis
+## 8. Theoretical Analysis
 
-### 7.1 Time Complexity: Showing the Work
+### 8.1 Time Complexity: Showing the Work
 
 The time complexity of A\* depends on two operations: inserting nodes into the binary min-heap and extracting the minimum node from it. To understand why the total cost is $O(V \log V)$, it is necessary to derive each term individually.
 
@@ -595,7 +639,7 @@ The constant factor of 2 is dropped in Big O notation, giving the final time com
 **Effect of the dynamic weight coefficient.**
 The dynamic weight $k$ changes the priority assigned to each heap entry but does not change the number of operations in the worst case. In practice, it dramatically reduces the number of nodes that are ever pushed into the heap because the higher weight when far from the goal causes the algorithm to reach the goal much faster, pruning many nodes from consideration entirely. The asymptotic bound remains $O(V \log V)$ but the effective constant is much smaller.
 
-### 7.2 Space Complexity: Showing the Work
+### 8.2 Space Complexity: Showing the Work
 
 The implementation allocates several arrays, each of size $V = \text{rows} \times \text{cols}$:
 
@@ -607,7 +651,7 @@ $$S(V) = O(V) + O(V) + O(V) + O(V) + O(V) = O(V)$$
 
 All terms are $O(V)$, so the total space complexity is $O(V)$. This is optimal for a grid-based search because any algorithm must store at minimum one value per reachable cell to avoid revisiting it.
 
-### 7.3 Comparison with Dijkstra
+### 8.3 Comparison with Dijkstra
 
 Dijkstra's algorithm, as derived above, also requires $O(V \log V)$ time and $O(V)$ space with a binary heap. The asymptotic bounds are identical. The practical difference lies entirely in the constant factor hidden by Big O notation.
 
@@ -615,7 +659,7 @@ Because Dijkstra sets $h(n) = 0$ for all nodes, its priority function is $f(n) =
 
 A\* with the dynamic weight coefficient sets $f(n) = g(n) + k \cdot h(n)$ where $k = 3$ when the robot is far from the goal. This causes the heuristic term to dominate the priority, pushing cells along the direct route to the goal to the top of the heap and preventing the algorithm from wasting heap operations on cells in the wrong direction. The result is that A\* effectively prunes the search to a narrow corridor around the optimal path, reducing the effective $V$ in the $O(V \log V)$ bound by over 96% on the largest test grids.
 
-### 7.4 Summary of Complexity
+### 8.4 Summary of Complexity
 
 | Algorithm | Time Complexity | Space Complexity | Nodes Expanded (60x60) |
 |:---|:---:|:---:|---:|
@@ -626,15 +670,15 @@ Both algorithms share the same asymptotic class. The 96.4% reduction in nodes ex
 
 ---
 
-## 8. Empirical Analysis
+## 9. Empirical Analysis
 
-### 8.1 Experimental Setup
+### 9.1 Experimental Setup
 
 Three experiments were conducted. Experiment 1 tests grid size scaling on corridor-style grids from 10x10 to 60x60 in steps of 5, giving 11 data points. Experiment 2 tests obstacle density scaling on a fixed 30x30 grid with random obstacle density from 0% to 20% using a fixed seed for reproducibility. Experiment 3 compares initial planning versus replanning timing across four grid sizes, directly inspired by the rerouting experiments in Hu et al. [2].
 
 The corridor layout for Experiments 1 and 3 uses two vertical obstacle walls with gaps, creating a path-planning problem that requires navigating through specific openings. This layout was chosen because an open grid would produce nearly identical results for both algorithms and the heuristic advantage would not be visible. Each algorithm was run 2,000 times per configuration and the average runtime per run in microseconds was recorded. All benchmarks were run on a MacBook Pro.
 
-### 8.2 Experiment 1 Results: Grid Size Scaling
+### 9.2 Experiment 1 Results: Grid Size Scaling
 
 | Grid Size | A\* Nodes | Dijkstra Nodes | Reduction | A\* Time (us) | Dijkstra Time (us) |
 |:---|---:|---:|---:|---:|---:|
@@ -652,7 +696,7 @@ The corridor layout for Experiments 1 and 3 uses two vertical obstacle walls wit
 
 The 10x10 case produces equal node counts because the small grid size allows both algorithms to reach the goal before the heuristic advantage accumulates. From 15x15 onward the divergence grows consistently, confirming that the reduction scales with grid size as predicted by the theoretical analysis. The percentage reduction increases monotonically from 53.7% to 96.4%, suggesting that the dynamic weight becomes more effective as the search space grows.
 
-### 8.3 Figure 1: Grid Search Visualization
+### 9.3 Figure 1: Grid Search Visualization
 
 ![A\* vs Dijkstra Grid Search](figures/astar_vs_dijkstra.png)
 
@@ -660,7 +704,7 @@ The 10x10 case produces equal node counts because the small grid size allows bot
 
 Figure 1 provides the most direct visual evidence for the central claim of this paper. The Dijkstra panel on the right shows the closed list covering a much larger area of the grid, since the algorithm processed nodes in all directions before reaching the goal. The A\* panel on the left shows a narrow purple corridor concentrated along the path toward the goal, with large unexplored regions remaining dark. Both algorithms found the same path, confirming equal path quality with dramatically different exploration costs. This visual pattern is consistent with the simulation results reported by Hu et al. [2] and by Chatzisavvas et al. [1].
 
-### 8.4 Figure 2: Nodes Expanded Across Grid Sizes
+### 9.4 Figure 2: Nodes Expanded Across Grid Sizes
 
 ![Nodes Expanded](figures/line_grid_size_nodes.png)
 
@@ -668,7 +712,7 @@ Figure 1 provides the most direct visual evidence for the central claim of this 
 
 Figure 2 shows that Dijkstra's node count grows approximately quadratically with grid size while A\*'s grows nearly linearly. The divergence beginning at 15x15 and widening through 60x60 confirms that the dynamic weight is most beneficial on larger grids, which is precisely the use case emphasized by Chatzisavvas et al. [1] in the context of large-scale robot navigation.
 
-### 8.5 Figure 3: Runtime Across Grid Sizes
+### 9.5 Figure 3: Runtime Across Grid Sizes
 
 ![Runtime](figures/line_grid_size_runtime.png)
 
@@ -676,7 +720,7 @@ Figure 2 shows that Dijkstra's node count grows approximately quadratically with
 
 Figure 3 confirms that the node count reduction translates directly to runtime reduction. Dijkstra's runtime grows steeply from 5 us at 15x15 to 180 us at 60x60, while A\*'s runtime remains nearly flat throughout the range. The timing benchmark also showed A\* averaging 4.66 us/run versus Dijkstra's 15.30 us/run on a 20x20 grid, a 3.3x speedup, confirming the efficiency gains described in Chatzisavvas et al. [1].
 
-### 8.6 Figure 4: Obstacle Density Experiment
+### 9.6 Figure 4: Obstacle Density Experiment
 
 ![Obstacle Density](figures/line_obstacle_nodes.png)
 
@@ -684,7 +728,7 @@ Figure 3 confirms that the node count reduction translates directly to runtime r
 
 Figure 4 shows how both algorithms respond to increasing obstacle density. As obstacles increase, Dijkstra's node count decreases because more cells are blocked and fewer are reachable. A\* maintains consistently lower node counts throughout, confirming that the dynamic weight coefficient is effective across varying obstacle densities, consistent with the agricultural environment experiments in Chatzisavvas et al. [1].
 
-### 8.7 Figure 5: Replanning Experiment
+### 9.7 Figure 5: Replanning Experiment
 
 ![Replanning](figures/line_replan.png)
 
@@ -692,7 +736,7 @@ Figure 4 shows how both algorithms respond to increasing obstacle density. As ob
 
 Figure 5 shows that replanning after a new obstacle appears expands slightly more nodes than the initial search, which is expected since the robot starts partway through the grid rather than at the corner. However the replanning search remains fast and focused, confirming that A\* is practical for real-time dynamic replanning in robot navigation as described in Hu et al. [2].
 
-### 8.8 Figure 6: Weighted Waypoint Network
+### 9.8 Figure 6: Weighted Waypoint Network
 
 ![Network Graph](figures/network_graph.png)
 
@@ -700,7 +744,7 @@ Figure 5 shows that replanning after a new obstacle appears expands slightly mor
 
 Figure 6 demonstrates A\* operating on a weighted graph representing a building floor plan. The network contains 17 rooms connected by 21 corridors with integer distance weights. A\* explored 9 of the 17 nodes and found the optimal path: Entrance to Lobby to Lab 3 to Hallway B to Hallway D to Conference to Exit. Eight nodes were never reached at all. This is the same graph abstraction used in classic city-route pathfinding problems where cities are nodes and roads are weighted edges — here the same structure guides a robot through a building instead.
 
-### 8.9 Figure 7: Heuristic Comparison Line Graph
+### 9.9 Figure 7: Heuristic Comparison Line Graph
 
 ![Heuristic Comparison](figures/line_heuristic_comparison.png)
 
@@ -708,7 +752,7 @@ Figure 6 demonstrates A\* operating on a weighted graph representing a building 
 
 Figure 7 shows the empirical impact of heuristic choice on nodes expanded. Manhattan standard expands the fewest nodes because it provides the tightest admissible lower bound on a 4-direction grid. Euclidean performs significantly worse than Manhattan despite being admissible, because its underestimation of the true grid distance is large enough to force wide exploration before the goal is found. Dijkstra performs worst since it has no directional guidance at all. These results are consistent with the independent findings of Yin et al. [6] and Gudari and Vadivu [7], both of whom report the same ordering across different grid environments. The figure confirms the central theoretical prediction: tighter admissible heuristics expand fewer nodes.
 
-### 8.10 Figure 8: Heuristic Comparison Grid Visualization
+### 9.10 Figure 8: Heuristic Comparison Grid Visualization
 
 ![Heuristic Comparison Grid](figures/heuristic_comparison.png)
 
@@ -716,11 +760,11 @@ Figure 7 shows the empirical impact of heuristic choice on nodes expanded. Manha
 
 Figure 8 provides a direct visual comparison of how much of the grid each algorithm explores. The top-left panel shows A\* with dynamic weight exploring a very narrow corridor of purple cells toward the goal. The top-right shows standard Manhattan A\* exploring slightly more cells. The bottom-left shows Euclidean A\* exploring a much larger region because its weaker heuristic estimate allows the search to spread sideways before converging on the goal. The bottom-right shows Dijkstra flooding almost the entire reachable area before finding the goal. Crucially all four panels show the same green path confirming that all three admissible heuristics produce the correct optimal result despite their different exploration patterns.
 
-### 8.11 Discussion
+### 9.11 Discussion
 
 The empirical results collectively confirm three findings from the literature. Chatzisavvas et al. [1] predict that dynamic weighting reduces search routes without degrading path quality, and the data here shows a 96.4% reduction at 60x60 with no change in path length. Hu et al. [2] predict that A\* with a weighted heuristic explores far fewer nodes than Dijkstra even when both find optimal paths, and Figures 1 and 8 confirm this both visually and quantitatively. Mai Jialing and Zhang Xiaohua [3] predict that dynamic weight adjustment improves efficiency in complex environments, and the corridor grids and waypoint network both demonstrate focused, efficient exploration consistent with that prediction. The heuristic comparison in Experiment 4, Figure 7, and Figure 8 further confirms that Manhattan distance is the correct heuristic choice for 4-direction grids, with Euclidean performing significantly worse despite being admissible — a finding independently validated by Yin et al. [6] and Gudari and Vadivu [7].
 
-### 8.12 Threats to Validity
+### 9.12 Threats to Validity
 
 Any empirical study of algorithm performance carries limitations that can affect the reliability of its conclusions, and it is important to be transparent about them here.
 
@@ -734,7 +778,7 @@ Finally, the **admissibility trade-off with $k = 3$** means that the paths found
 
 ---
 
-## 9. Rerouting Experiment
+## 10. Rerouting Experiment
 
 One of the practical advantages of A\* for robot navigation is the ability to replan dynamically when the environment changes. Hu et al. [2] study this scenario specifically in the context of outdoor delivery robots encountering unexpected choke points such as traffic congestion or road construction. In order to demonstrate this capability, the demo program `src/main.c` implements a rerouting scenario in which A\* finds an initial path from start to goal, the robot is simulated to have moved three steps along the planned route, a new obstacle is introduced at the next cell on the original path to simulate an unexpected blockage, and A\* is called again from the robot's current position to produce a new path that avoids the blocked cell.
 
@@ -742,9 +786,9 @@ In the captured output at `outputs/sample_run.txt`, the rerouted search expanded
 
 ---
 
-## 10. Testing
+## 11. Testing
 
-Thirteen correctness tests are implemented in `src/tests.c`. All thirteen must pass before the empirical benchmark data can be interpreted as meaningful, since a flawed implementation would produce incorrect node counts and path lengths that appear plausible but are not. The first nine tests validate the core A* correctness properties. The final four tests specifically validate the heuristic comparison functions added for Experiment 4.
+Thirteen correctness tests are implemented in `src/tests.c`. All thirteen must pass before the empirical benchmark data can be interpreted as meaningful, since a flawed implementation would produce incorrect node counts and path lengths that appear plausible but are not.
 
 | Test | Property Verified |
 |:---|:---|
@@ -757,25 +801,8 @@ Thirteen correctness tests are implemented in `src/tests.c`. All thirteen must p
 | `test_astar_expands_fewer_nodes_than_dijkstra` | A\* node count strictly less than Dijkstra |
 | `test_reroute_after_new_obstacle` | Valid alternative path found after mid-route blockage |
 | `test_dynamic_weight_reduces_nodes` | Dynamic weight produces fewer nodes than Dijkstra, 44 vs 384 |
-| `test_manhattan_standard_finds_correct_path` | Standard A* Manhattan k=1 finds correct path on compare grid |
-| `test_euclidean_standard_finds_correct_path` | Euclidean A* k=1 finds correct path on compare grid |
-| `test_all_heuristics_same_path_length` | All four configurations find paths of equal optimal length, proving admissibility |
-| `test_manhattan_expands_fewer_than_euclidean` | Manhattan expands fewer nodes than Euclidean on 4-direction grid (39 vs 347) |
 
-Test 9 was added specifically to validate the core contribution of this implementation. It constructs a 20x20 grid with a vertical obstacle wall, runs both A* with dynamic weighting and Dijkstra, and asserts that A* expands strictly fewer nodes. In practice, A* expanded 44 nodes versus Dijkstra's 384, an 88.5% reduction, directly confirming the prediction of Chatzisavvas et al. [1].
-
-Tests 10 and 11 verify that the two new search functions added for Experiment 4 correctly find paths from start to goal. Test 12 is the most important new test: it asserts that all four configurations find paths of exactly equal length on the same grid, which is the formal empirical proof of admissibility. If any heuristic were inadmissible it would potentially return a suboptimal path here and fail the assertion. Test 13 asserts that Manhattan expands strictly fewer nodes than Euclidean on a 4-direction grid (39 vs 347), directly confirming the theoretical prediction and the independent findings of Gudari and Vadivu [7] and Yin et al. [6].
-
-The timing summary from `make test` on the MacBook Pro test machine shows:
-
-| Configuration | Avg Runtime |
-|:---|---:|
-| A* Manhattan + dynamic k | 3.54 us/run |
-| A* Manhattan + fixed k=1 | 2.72 us/run |
-| A* Euclidean + fixed k=1 | 24.37 us/run |
-| Dijkstra (no heuristic) | 11.11 us/run |
-
-Manhattan fixed k=1 is the fastest because it expands the fewest nodes and has no integer division overhead. Euclidean is the slowest A* variant because it expands many more nodes and involves a square root computation. The dynamic weight is slightly slower than Manhattan fixed k=1 but faster than Dijkstra, confirming it is practical for real-time use.
+The final test was added specifically to validate the core contribution of this implementation. It constructs a 20x20 grid with a vertical obstacle wall, runs both A\* with dynamic weighting and Dijkstra, and asserts that A\* expands strictly fewer nodes. In practice, A\* expanded 44 nodes versus Dijkstra's 384, an 88.5% reduction, directly confirming the prediction of Chatzisavvas et al. [1].
 
 To reproduce all tests:
 
@@ -785,13 +812,13 @@ make test
 
 ---
 
-## 11. Limitations
+## 12. Limitations
 
 This implementation is intentionally scoped to match the assignment expectations, and several important limitations should be acknowledged before drawing broader conclusions from the results.
 
 The most significant is that the occupancy grid treats the robot as a dimensionless point mass with uniform step costs of 1 per cell. A physical robot must account for joint kinematics, center-of-mass stability, step placement constraints, turning radius, and actuator dynamics. None of these concerns are modeled here. The implementation handles only the discrete path planning layer of what would in practice be a multi-layer control system. This is a deliberate simplification, not an oversight, but it means the results should be understood as describing path planning performance in isolation rather than full robot navigation performance.
 
-A second limitation is that the grid is assumed to be fully known and static before the search begins. Real robots must build their maps incrementally as they explore, a problem addressed by Simultaneous Localization and Mapping algorithms. Mai Jialing and Zhang Xiaohua [3] identify online map integration as a critical direction for future work in their conclusion, and this limitation applies equally here. The rerouting experiment in Section 9 partially addresses this by demonstrating that A\* can replan when a new obstacle appears, but the broader map is still assumed to be known in advance.
+A second limitation is that the grid is assumed to be fully known and static before the search begins. Real robots must build their maps incrementally as they explore, a problem addressed by Simultaneous Localization and Mapping algorithms. Mai Jialing and Zhang Xiaohua [3] identify online map integration as a critical direction for future work in their conclusion, and this limitation applies equally here. The rerouting experiment in Section 10 partially addresses this by demonstrating that A\* can replan when a new obstacle appears, but the broader map is still assumed to be known in advance.
 
 The admissibility trade-off with $k = 3$ also deserves acknowledgment. When the estimated cost exceeds the threshold of 18, the effective heuristic is $3 \cdot h(n)$, which may overestimate the true remaining cost and technically violates the admissibility condition required for guaranteed optimality. In practice, no suboptimal paths were observed across any of the benchmark configurations, but the theoretical guarantee is weaker than standard A\*. Applications that require strict optimality guarantees under all obstacle configurations should use $k \leq 1$ throughout the search.
 
@@ -799,19 +826,17 @@ Finally, the C implementation uses fixed-size stack-allocated arrays with a maxi
 
 ---
 
-## 12. Conclusion
+## 13. Conclusion
 
-This paper presented an implementation of A\* with a dynamic weight coefficient for robot navigation, grounded in three peer-reviewed papers by Chatzisavvas et al. [1], Hu et al. [2], and Mai Jialing and Zhang Xiaohua [3]. The core modification, setting the heuristic weight $k$ to 3 when far from the goal and 0.85 when near it, reduced nodes expanded by up to 96.4% compared to Dijkstra's algorithm across the benchmark grid sizes and produced consistent runtime speedups across all three experiments.
+This paper presented a complete implementation of the A\* Search Algorithm with a dynamic weight coefficient for robot navigation, grounded in research from Chatzisavvas et al. [1], Hu et al. [2], and Mai Jialing and Zhang Xiaohua [3]. The core modification — setting the heuristic weight $k$ to 3 when far from the goal and 0.85 when near it — reduced nodes expanded by up to 96.4% compared to Dijkstra's algorithm across the benchmark grid sizes and produced consistent runtime improvements across all four experiments. Additionally, the heuristic comparison experiments confirmed that Manhattan distance is the most effective heuristic for 4-direction grid environments, expanding roughly 28 times fewer nodes than Euclidean distance at the 60x60 scale and aligning with the independent findings of both Yin et al. [6] and Gudari and Vadivu [7].
 
-The implementation connects graph theory, binary heap priority queues, Dijkstra's shortest path algorithm, and loop invariant correctness proofs into a single cohesive project. The weighted waypoint network demonstrates that the same graph abstraction used to find routes between cities scales directly to indoor robot navigation. In this sense, A\* is not an isolated topic but a synthesis of foundational computer science concepts applied to a real engineering problem.
+A\* with a dynamic weight coefficient represents a practically important balance between the theoretical guarantees of standard A\* and the speed of purely greedy search. As robot navigation systems are deployed in increasingly large and complex environments — agricultural fields, hospital corridors, city streets — the ability to reduce search effort dramatically while maintaining near-optimal path quality becomes essential. The results here confirm that even a simple two-value adaptive weight can achieve significant efficiency gains, supporting the broader research direction pursued by all three source papers and validated by the heuristic comparison studies.
 
-A\* with a dynamic weight coefficient represents a practically important balance between the theoretical guarantees of standard A\* and the speed of purely greedy search. As robot navigation systems operate in increasingly large and complex environments, the ability to reduce search effort by orders of magnitude while maintaining near-optimal path quality will remain essential. The results in this paper confirm that even a simple two-value adaptive weight can achieve dramatic efficiency gains, supporting the broader research direction pursued by all three source papers.
-
-The most valuable thing learned from this project was the distinction between asymptotic complexity and practical performance. A\* and Dijkstra share the same $O(V \log V)$ worst-case bound, which on paper makes them equivalent. In practice, A\* expanded 96.4% fewer nodes at 60x60. This gap lives entirely in the constant factor that Big O notation discards, and it is the difference between an algorithm that is theoretically sound and one that is actually useful for real-time robot navigation. The heuristic is what closes that gap, and the dynamic weight is what makes the heuristic more effective in practice than in theory. That relationship between theoretical analysis and empirical measurement is something that could not be fully understood from equations alone, and running the benchmarks made it concrete in a way that reading the source papers by themselves did not.
+One of the most valuable things learned from completing this project was the distinction between asymptotic complexity and practical performance. A\* and Dijkstra share the same $O(V \log V)$ worst-case bound on paper. In practice, A\* expanded 96.4% fewer nodes at 60x60. That gap lives entirely in the constant factor that Big O notation discards, and it is the difference between an algorithm that is theoretically sound and one that is actually useful in real time. The heuristic is what closes that gap, and the dynamic weight is what makes the heuristic more effective in practice than in theory. This relationship between theoretical analysis and empirical measurement could not be fully understood from equations alone — running the benchmarks and seeing the numbers made it concrete in a way that reading the source papers alone did not. For anyone looking to implement efficient pathfinding for robot navigation, the findings here suggest that a well-chosen adaptive heuristic is not just a performance optimization, but a necessary component of a practical system.
 
 ---
 
-## 13. How to Build and Run
+## 14. How to Build and Run
 
 **Requirements:** `gcc` with C11 support, `make`, Python 3 with `matplotlib`, `numpy`, and `networkx`.
 
@@ -839,7 +864,7 @@ python3 line_graphs.py
 
 ---
 
-## 14. References
+## 15. References
 
 [1] A. Chatzisavvas, M. Dossis, and M. Dasygenis, "Optimizing Mobile Robot Navigation Based on A-Star Algorithm for Obstacle Avoidance in Smart Agriculture," *Electronics*, vol. 13, no. 11, p. 2057, 2024. https://doi.org/10.3390/electronics13112057
 
