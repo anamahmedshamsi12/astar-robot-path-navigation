@@ -8,7 +8,7 @@ Khoury College of Computer Sciences, Northeastern University
 
 ## Abstract
 
-This paper presents an implementation of the A\* Search Algorithm with a dynamic weight coefficient applied to robot navigation on a 2D occupancy grid and a weighted waypoint network. The dynamic weight, introduced by Chatzisavvas, Dossis, and Dasygenis [1], modifies the standard evaluation function from $f(n) = g(n) + h(n)$ to $f(n) = g(n) + k \cdot h(n)$, where $k$ adapts based on the estimated remaining distance to the goal. Empirical results demonstrate that this modification reduces nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six grid sizes ranging from 10x10 to 60x60. The implementation is written in C using a from-scratch binary min-heap priority queue and is validated by nine correctness tests. Visualizations on both a grid environment and a building waypoint network confirm the theoretical efficiency claims made in the source literature.
+This paper presents an implementation of the A\* Search Algorithm with a dynamic weight coefficient applied to robot navigation on a 2D occupancy grid and a weighted waypoint network. The dynamic weight, introduced by Chatzisavvas, Dossis, and Dasygenis [1], modifies the standard evaluation function from $f(n) = g(n) + h(n)$ to $f(n) = g(n) + k \cdot h(n)$, where $k$ adapts based on the estimated remaining distance to the goal. Empirical results demonstrate that this modification reduces nodes expanded by up to 96.4% compared to Dijkstra's algorithm across six grid sizes ranging from 10x10 to 60x60. The implementation is written in C using a from-scratch binary min-heap priority queue and is validated by thirteen correctness tests including four heuristic comparison tests that confirm the admissibility and relative efficiency of Manhattan, Euclidean, and the dynamic weight coefficient. Visualizations on both a grid environment and a building waypoint network confirm the theoretical efficiency claims made in the source literature.
 
 ---
 
@@ -302,7 +302,7 @@ flowchart TD
         H[astar.h\nstructs, constants,\nprototypes]
         A[astar.c\ndynamic weight,\nheap, search]
         M[main.c\nCLI demo\nrerouting]
-        T[tests.c\n9 correctness tests]
+        T[tests.c\n13 correctness tests]
         B[benchmark.c\n3 experiments]
     end
 
@@ -494,7 +494,7 @@ The first was representing the dynamic weight coefficient in integer arithmetic.
 
 The second challenge was lazy deletion in the heap. A\* naturally produces multiple heap entries for the same cell as better paths are discovered. Updating existing heap entries in place would require a decrease-key operation, which is complex to implement correctly in a fixed-size array heap. Instead, the implementation uses lazy deletion: when a better path to a cell is found, a new entry is simply pushed with the improved score, and stale entries are detected and skipped when they are popped by checking the closed set. This required sizing the heap at `MAX_CELLS * 4` to handle the worst case of multiple entries per cell without overflow.
 
-The third challenge was testing the dynamic weight specifically. Standard A\* tests do not distinguish between the weighted and unweighted versions of the heuristic because both find optimal paths on the test grids. The ninth test `test_dynamic_weight_reduces_nodes` was specifically designed to validate that the weight is actually being applied by checking that nodes expanded is significantly lower than Dijkstra on a 20x20 grid with a vertical wall. Without this test, a silent bug that disabled the weighting would have passed all other tests undetected.
+The third challenge was testing the dynamic weight specifically. Standard A\* tests do not distinguish between the weighted and unweighted versions of the heuristic because both find optimal paths on the test grids. Test 9 `test_dynamic_weight_reduces_nodes` was specifically designed to validate that the weight is actually being applied by checking that nodes expanded is significantly lower than Dijkstra on a 20x20 grid with a vertical wall. Without this test, a silent bug that disabled the weighting would have passed all other tests undetected.
 
 The approach taken to understand the algorithm before writing the C implementation was to study Python implementations of A\* such as the one described by GeeksforGeeks [5] and the explanation in the Awe Robotics robotics path planning article. After understanding the algorithm structure through those resources, the C implementation was written from scratch in a style consistent with the course conventions, without copying any code directly.
 
@@ -504,7 +504,7 @@ final-paper-anamahmedshamsi12-1/
 │   ├── astar.h          - structs, constants, function prototypes
 │   ├── astar.c          - heap, grid helpers, dynamic weight, A*, Dijkstra
 │   ├── main.c           - demo with rerouting and heuristic comparison
-│   ├── tests.c          - 9 correctness tests
+│   ├── tests.c          - 13 correctness tests
 │   └── benchmark.c      - timing and node-count benchmarks
 ├── outputs/
 │   ├── sample_run.txt
@@ -744,7 +744,7 @@ In the captured output at `outputs/sample_run.txt`, the rerouted search expanded
 
 ## 10. Testing
 
-Nine correctness tests are implemented in `src/tests.c`. All nine must pass before the empirical benchmark data can be interpreted as meaningful, since a flawed implementation would produce incorrect node counts and path lengths that appear plausible but are not.
+Thirteen correctness tests are implemented in `src/tests.c`. All thirteen must pass before the empirical benchmark data can be interpreted as meaningful, since a flawed implementation would produce incorrect node counts and path lengths that appear plausible but are not. The first nine tests validate the core A* correctness properties. The final four tests specifically validate the heuristic comparison functions added for Experiment 4.
 
 | Test | Property Verified |
 |:---|:---|
@@ -757,8 +757,25 @@ Nine correctness tests are implemented in `src/tests.c`. All nine must pass befo
 | `test_astar_expands_fewer_nodes_than_dijkstra` | A\* node count strictly less than Dijkstra |
 | `test_reroute_after_new_obstacle` | Valid alternative path found after mid-route blockage |
 | `test_dynamic_weight_reduces_nodes` | Dynamic weight produces fewer nodes than Dijkstra, 44 vs 384 |
+| `test_manhattan_standard_finds_correct_path` | Standard A* Manhattan k=1 finds correct path on compare grid |
+| `test_euclidean_standard_finds_correct_path` | Euclidean A* k=1 finds correct path on compare grid |
+| `test_all_heuristics_same_path_length` | All four configurations find paths of equal optimal length, proving admissibility |
+| `test_manhattan_expands_fewer_than_euclidean` | Manhattan expands fewer nodes than Euclidean on 4-direction grid (39 vs 347) |
 
-The final test was added specifically to validate the core contribution of this implementation. It constructs a 20x20 grid with a vertical obstacle wall, runs both A\* with dynamic weighting and Dijkstra, and asserts that A\* expands strictly fewer nodes. In practice, A\* expanded 44 nodes versus Dijkstra's 384, an 88.5% reduction, directly confirming the prediction of Chatzisavvas et al. [1].
+Test 9 was added specifically to validate the core contribution of this implementation. It constructs a 20x20 grid with a vertical obstacle wall, runs both A* with dynamic weighting and Dijkstra, and asserts that A* expands strictly fewer nodes. In practice, A* expanded 44 nodes versus Dijkstra's 384, an 88.5% reduction, directly confirming the prediction of Chatzisavvas et al. [1].
+
+Tests 10 and 11 verify that the two new search functions added for Experiment 4 correctly find paths from start to goal. Test 12 is the most important new test: it asserts that all four configurations find paths of exactly equal length on the same grid, which is the formal empirical proof of admissibility. If any heuristic were inadmissible it would potentially return a suboptimal path here and fail the assertion. Test 13 asserts that Manhattan expands strictly fewer nodes than Euclidean on a 4-direction grid (39 vs 347), directly confirming the theoretical prediction and the independent findings of Gudari and Vadivu [7] and Yin et al. [6].
+
+The timing summary from `make test` on the MacBook Pro test machine shows:
+
+| Configuration | Avg Runtime |
+|:---|---:|
+| A* Manhattan + dynamic k | 3.54 us/run |
+| A* Manhattan + fixed k=1 | 2.72 us/run |
+| A* Euclidean + fixed k=1 | 24.37 us/run |
+| Dijkstra (no heuristic) | 11.11 us/run |
+
+Manhattan fixed k=1 is the fastest because it expands the fewest nodes and has no integer division overhead. Euclidean is the slowest A* variant because it expands many more nodes and involves a square root computation. The dynamic weight is slightly slower than Manhattan fixed k=1 but faster than Dijkstra, confirming it is practical for real-time use.
 
 To reproduce all tests:
 
@@ -808,7 +825,7 @@ make all
 # Run scenario 3 only (heuristic comparison table)
 ./demo -s 3
 
-# Run all 9 correctness tests
+# Run all 13 correctness tests
 make test
 
 # Run all 4 benchmark experiments
