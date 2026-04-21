@@ -1,7 +1,7 @@
 # A\* Search Algorithm with Dynamic Weight Coefficient for Robot Navigation
 
 **Anam Shamsi**
-CS 5008 Spring 2026 - Summative Research Project
+CS 5008 - Summative Research Project
 Khoury College of Computer Sciences, Northeastern University
 
 ---
@@ -612,7 +612,7 @@ When $k = 3$, the effective heuristic is $3 \cdot h(n)$, which may overestimate 
 
 ## 8. Theoretical Analysis
 
-### 8.1 Time Complexity:
+### 8.1 Time Complexity: Showing the Work
 
 The time complexity of A\* depends on two operations: inserting nodes into the binary min-heap and extracting the minimum node from it. To understand why the total cost is $O(V \log V)$, it is necessary to derive each term individually.
 
@@ -639,7 +639,7 @@ The constant factor of 2 is dropped in Big O notation, giving the final time com
 **Effect of the dynamic weight coefficient.**
 The dynamic weight $k$ changes the priority assigned to each heap entry but does not change the number of operations in the worst case. In practice, it dramatically reduces the number of nodes that are ever pushed into the heap because the higher weight when far from the goal causes the algorithm to reach the goal much faster, pruning many nodes from consideration entirely. The asymptotic bound remains $O(V \log V)$ but the effective constant is much smaller.
 
-### 8.2 Space Complexity: 
+### 8.2 Space Complexity: Showing the Work
 
 The implementation allocates several arrays, each of size $V = \text{rows} \times \text{cols}$:
 
