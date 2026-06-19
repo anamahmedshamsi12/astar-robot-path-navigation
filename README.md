@@ -1,9 +1,6 @@
 # A\* Search Algorithm with Dynamic Weight Coefficient for Robot Navigation
 
 **Anam Shamsi**  
-CS 5008 Summative Research Project  
-Khoury College of Computer Sciences, Northeastern University  
-Spring 2026
 
 ---
 
